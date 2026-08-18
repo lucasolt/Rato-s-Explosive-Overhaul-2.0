@@ -26,7 +26,8 @@ function AI_deviate_skill_diff(unit)
 end
 
 function AI_ExplosiveStatforIED(unit)
-    local level_stat = cRound(1.6 * (unit:GetLevel() or 1))
+    local unit_level = unit and unit:GetLevel() or 1
+    local level_stat = cRound(1.6 * unit_level)
     local random_factor = 12
     local random = InteractionRand(random_factor * 2, "RATONADE_AIstatIED") - random_factor -- unit:Random(random_factor * 2) - random_factor
     return Min(100, 70 + random + level_stat)
