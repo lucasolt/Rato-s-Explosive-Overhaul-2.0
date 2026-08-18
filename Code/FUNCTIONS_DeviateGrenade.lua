@@ -18,7 +18,7 @@ function MishapProperties:rat_deviation(attacker, target_pos, attack_args, attac
 end
 
 function validate_deviated_gren_pos(explosion_pos, attack_args)
-    local newGroundPos
+    local newGroundPos = explosion_pos
     if explosion_pos then
         local slab, slab_z = WalkableSlabByPoint(explosion_pos, "downward only")
         local z = explosion_pos:z()

@@ -15,9 +15,9 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 2,
 	'version_minor', 20,
-	'version', 3810,
+	'version', 3812,
 	'lua_revision', 233360,
-	'saved_with_revision', 350233,
+	'saved_with_revision', 366685,
 	'entities', {
 		"frag_tnt_misfired",
 		"fragmentary_tnt",
@@ -111,8 +111,8 @@ return PlaceObj('ModDef', {
 		shrap_num = "100",
 	},
 	'has_data', true,
-	'saved', 1739951243,
-	'code_hash', -6292224756942531346,
+	'saved', 1787010811,
+	'code_hash', 8311359837216000834,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "CharacterEffectCompositeDef",
