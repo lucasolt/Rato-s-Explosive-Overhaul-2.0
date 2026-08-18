@@ -117,7 +117,12 @@ function AI_adj_targetpos_for_bounce(orig_attack_args, target_pos, attack_pos, g
 
             bounced_trajectory, bounce_pos = get_bounces(grenade, trajectory, attack_args,
                                                          explosion_pos)
-            bounce_pos = bounced_trajectory[#bounced_trajectory].pos
+
+            if bounced_trajectory and #bounced_trajectory > 0 then
+                bounce_pos = bounced_trajectory[#bounced_trajectory].pos
+            else
+                bounce_pos = nil
+            end
 
             if bounce_pos then
                 local bounce_dist_target = bounce_pos:Dist(target_pos)
@@ -125,22 +130,15 @@ function AI_adj_targetpos_for_bounce(orig_attack_args, target_pos, attack_pos, g
                 if abs(bounce_pos:z() - target_pos:z()) <= z_tolerance then
                     if bounce_dist_target <= thrs_dist then
                         DbgAddCircle_ai_adj(final_target_pos, const.SlabSizeX / 6, const.clrYellow)
-                        best_target_pos, best_traj, best_angle, best_bounce_pos = final_target_pos,
-                                                                                  bounced_trajectory,
-                                                                                  angle, bounce_pos
+                        best_target_pos, best_dist, best_traj, best_angle, best_bounce_pos =
+                            final_target_pos, bounce_dist_target, bounced_trajectory, angle,
+                            bounce_pos
                         break
 
-                    elseif best_target_pos then
+                    elseif not best_target_pos or bounce_dist_target < best_dist then
                         best_target_pos, best_dist, best_traj, best_angle, best_bounce_pos =
-                            best_dist <= bounce_dist_target and best_target_pos, best_dist,
-                            best_traj, best_angle, best_bounce_pos or final_target_pos,
-                            bounce_dist_target, bounced_trajectory, angle, bounce_pos
-                    else
-                        best_bounce_pos = bounce_pos
-                        best_angle = angle
-                        best_traj = bounced_trajectory
-                        best_dist = bounce_dist_target
-                        best_target_pos = final_target_pos
+                            final_target_pos, bounce_dist_target, bounced_trajectory, angle,
+                            bounce_pos
                     end
                 end
             end
@@ -149,9 +147,9 @@ function AI_adj_targetpos_for_bounce(orig_attack_args, target_pos, attack_pos, g
         tries = tries + 1
     end
 
-    for i, step in ipairs(best_traj) do
+    for i, step in ipairs(best_traj or empty_table) do
         DbgAddCircle_ai_adj(step.pos, const.SlabSizeX / 10, const.clrCyan)
     end
 
-    return best_target_pos and best_target_pos, best_traj, best_angle or target_pos, false, false
+    return best_target_pos or target_pos, best_traj, best_angle, false, false
 end
