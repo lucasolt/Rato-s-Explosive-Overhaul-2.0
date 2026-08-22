@@ -52,20 +52,20 @@ function DbgAddCircle_collide_test(pos, r, c)
     end
 end
 
+---- Os dois respeitam a chave mestra EO_DeviationDebug (definida em
+---- FUNCTIONS_DeviateGrenade.lua). Assim EO_DeviationDebug = false apaga tudo que o
+---- desvio desenha, inclusive o ponto de impacto e o vetor, que nao passam pelos
+---- toggles de anel.
 function DbgAddCircle_devi(a, b, color)
-    local enabled = true
-    if enabled then
+    if EO_DeviationDebug ~= false then
         DbgAddCircle(a, b, color)
     end
-
 end
 
 function DbgAddVector_devi(a, b, color)
-    local enabled = true
-    if enabled then
+    if EO_DeviationDebug ~= false then
         DbgAddVector(a, b, color)
     end
-
 end
 
 function DbgAddCircle_ai_adj(a, b, c)
