@@ -77,13 +77,14 @@ local underslungGLpenalty = -10 --- higher = more accurate
 
 ---- Ajustados por fit ancorado em 15 TILES, contra o alvo do autor:
 ----   Great tipico 1 t | Good 2 t | Inaccurate 3.5 t | Terrible 5 t
----- A 15t o p50/p90 batem: stat 90 -> 1.15/2.12 | 75 -> 1.65/2.90 | 60 -> 2.36/3.77 | 45 -> 3.09/4.65
+---- Depois escalados 1.20x a pedido ("uns 20% mais desviado").
+---- A 15t: stat 90 -> 1.38/2.54 | 75 -> 1.98/3.48 | 60 -> 2.83/4.52 | 45 -> 3.71/5.58
 ---- r_max(100) fica em 0.61 t de proposito: se ele chegasse a zero, um merc de ui alto
 ---- em curta distancia teria r_max = r_min = 0 e TODO arremesso viraria Perfect.
-local r_min_base = 976 ---- erro minimo no stat 0, em milesimos de tile
-local r_min_scale = 1910 ---- r_min chega a zero por volta de ui 51
-local r_max_base = 7285 ---- erro maximo no stat 0
-local r_max_scale = 6676 ---- quanto a skill baixa o teto -> r_max(100) = 0.61 t
+local r_min_base = 1171 ---- erro minimo no stat 0, em milesimos de tile
+local r_min_scale = 2292 ---- r_min chega a zero por volta de ui 51
+local r_max_base = 8742 ---- erro maximo no stat 0
+local r_max_scale = 8011 ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
 ---- (r_max_scale - r_min_scale) e a taxa com que a faixa ESTREITA conforme a skill sobe:
 ---- positivo = skill compra consistencia; zero = skill desloca a faixa inteira (precisao pura)
 
@@ -155,6 +156,26 @@ local function deviation_radius(stat, roll, is_grenade)
     return r, gate
 end
 
+---- "1972" -> "1.97"
+local function fmt_tiles(milesimos)
+    local neg = milesimos < 0
+    local m = neg and -milesimos or milesimos
+    return string.format("%s%d.%02d", neg and "-" or "", m / 1000, (m % 1000) / 10)
+end
+
+local function label_of(err)
+    if err <= 0 then
+        return "Perfect"
+    elseif err <= label_great_tiles then
+        return "Great"
+    elseif err <= label_good_tiles then
+        return "Good"
+    elseif err <= label_inacc_tiles then
+        return "Innacurate"
+    end
+    return "Terrible"
+end
+
 ---- Rolls que caem em cada percentil do dado (2 x InteractionRand(50), roll 1..99).
 ---- Como o raio e monotonico no roll, o percentil do raio e o raio DO percentil do roll.
 local pctl_rolls = {{10, 22}, {25, 35}, {50, 50}, {75, 65}, {90, 78}}
@@ -175,7 +196,7 @@ function EO_DrawDeviationRings(target_pos, stat, is_grenade)
     local labels = {
         {label_great_tiles, const.clrGreen},
         {label_good_tiles, const.clrYellow},
-        {label_inacc_tiles, const.clrOrange}
+        {label_inacc_tiles, const.clrRed}
     }
     for _, row in ipairs(labels) do
         DbgAddCircle_devi(target_pos, MulDivRound(row[1], const.SlabSizeX, 1000), row[2])
@@ -190,12 +211,26 @@ function EO_DrawDeviationRings(target_pos, stat, is_grenade)
         end
     end
 
-    if Platform.developer then
-        local p50 = deviation_radius(stat, 50, is_grenade)
-        local p90 = deviation_radius(stat, 78, is_grenade)
-        print("----RATONADE - aneis", "stat", stat, "p50", p50, "p90", p90,
-              "| rotulos", label_great_tiles, label_good_tiles, label_inacc_tiles)
+end
+
+---- Uma linha por arremesso, com tudo que esta desenhado no mapa.
+function EO_PrintDeviation(stat, roll, gate, radius, err, is_grenade)
+    if not Platform.developer then
+        return
     end
+    local pct = {}
+    for _, row in ipairs(pctl_rolls) do
+        pct[#pct + 1] = string.format("p%d %s", row[1],
+                            fmt_tiles(deviation_radius(stat, row[2], is_grenade)))
+    end
+    print("---- RATONADE deviation --------------------------------------")
+    print(string.format("   stat %d | roll %d | gate %d | erro %s t  ->  %s",
+                        stat, roll, gate, fmt_tiles(err), label_of(err)))
+    print("   percentis (aneis azuis, p50 ciano):  " .. table.concat(pct, "   "))
+    print(string.format("   rotulos (verde/amarelo/vermelho):  Great <=%s   Good <=%s   Innacurate <=%s   Terrible acima",
+                        fmt_tiles(label_great_tiles), fmt_tiles(label_good_tiles),
+                        fmt_tiles(label_inacc_tiles)))
+    print("--------------------------------------------------------------")
 end
 
 function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, test)
@@ -215,11 +250,6 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
 
     local radius, gate = deviation_radius(stat, roll, is_grenade)
 
-    if Platform.developer and not test then
-        print("----RATONADE - DEBUG deviation")
-        print("roll", roll, "stat", stat, "gate", gate, "raio(milesimos de tile)", radius)
-    end
-
     if test then
         return radius, roll
     end
@@ -228,6 +258,7 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
 
     ---- acerto exato: quem chama trata o false como "nao desviou"
     if radius <= 0 then
+        EO_PrintDeviation(stat, roll, gate, 0, 0, is_grenade)
         CreateFloatingText(target_pos, T("Perfect Throw"))
         return false
     end
@@ -281,6 +312,7 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
                          T("<color AmmoAPColor>Terrible Launch</color>")
     end
     CreateFloatingText(target_pos, float_text)
+    EO_PrintDeviation(stat, roll, gate, radius, err, is_grenade)
 
     ---- onde caiu de verdade: ponto branco na ponta do vetor vermelho
     DbgAddVector_devi(target_pos, offset, const.clrRed)
