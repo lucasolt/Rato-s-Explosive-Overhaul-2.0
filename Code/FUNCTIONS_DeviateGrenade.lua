@@ -43,8 +43,7 @@ function validate_deviated_gren_pos(explosion_pos, attack_args)
 end
 
 ----------Args
-local base_skill_modifier = 6 --- higher = more accurate
-local GR_dist_pen = 18 ---- Higher = less accurate
+local GR_dist_pen = 25 ---- Higher = less accurate
 local RPG_dist_pen = 15 ---- Higher = less accurate
 local GL_dist_pen = 15 ---- Higher = less accurate
 
@@ -57,27 +56,56 @@ local rainHeavyPenalty = 10 ---- Higher = less accurate
 ------ Get item accuracy modidifers
 local underslungGLpenalty = -10 --- higher = more accurate
 
-------- Deviation Params
+------- Deviation Params ---- MOTOR ABSOLUTO
+--
+-- O raio do erro e desenhado direto em tiles, sem clamp:
+--
+--     miss = (roll - gate) / (100 - gate)                 gate = stat * sfp / 100
+--     r    = r_min(stat) + (r_max(stat) - r_min(stat)) * miss^dev_shape
+--     dir  = 90deg * sinal(u) * |u|^dir_bias  (u uniforme em [-1,1]) + flip de 180deg
+--
+-- |erro| = r sempre. O r_min e um piso de imprecisao de verdade, e o vies mora na
+-- DIRECAO, nao na magnitude. Nao existe max()/min() no caminho, entao a distribuicao
+-- nao tem atomo (a versao com piso por clamp empilhava metade da massa num raio so).
+--
+-- A distancia NAO multiplica mais o erro. Ela entra por um canal so: GR_dist_pen,
+-- que desconta do stat. Por isso o clamp de unidades tiles-vs-mundo deixou de existir
+-- junto com o bloco geometrico antigo.
+--
+-- Tudo em milesimos de tile e percentuais inteiros: Lua 5.3 com '/' inteiro, e float
+-- em caminho sincronizado vaza para o NetUpdateHash (ver CLAUDE.md).
 
-local dev_thrs_innac_throw = 2.0
-local accurate_angle_mul = 0.85 ---- when a throw is accurate or better, reduce the amount of angle deviation to minimize the chance of hitting close objects
+---- Ajustados por fit ancorado em 15 TILES, contra o alvo do autor:
+----   Great tipico 1 t | Good 2 t | Inaccurate 3.5 t | Terrible 5 t
+---- A 15t o p50/p90 batem: stat 90 -> 1.15/2.12 | 75 -> 1.65/2.90 | 60 -> 2.36/3.77 | 45 -> 3.09/4.65
+---- r_max(100) fica em 0.61 t de proposito: se ele chegasse a zero, um merc de ui alto
+---- em curta distancia teria r_max = r_min = 0 e TODO arremesso viraria Perfect.
+local r_min_base = 976 ---- erro minimo no stat 0, em milesimos de tile
+local r_min_scale = 1910 ---- r_min chega a zero por volta de ui 51
+local r_max_base = 7285 ---- erro maximo no stat 0
+local r_max_scale = 6676 ---- quanto a skill baixa o teto -> r_max(100) = 0.61 t
+---- (r_max_scale - r_min_scale) e a taxa com que a faixa ESTREITA conforme a skill sobe:
+---- positivo = skill compra consistencia; zero = skill desloca a faixa inteira (precisao pura)
 
-local def_min_dev = 0 -- 0.75
-local great_throw_threshold = 0.75
+local dev_shape = 1 ---- expoente INTEIRO. 1 = linear. >1 concentra perto do piso (precisao comum),
+---- a curva espelhada 1-(1-miss)^k faz o oposto (precisao rara) -- ver dev_shape_mirror abaixo
+local dev_shape_mirror = false ---- true troca miss^k por 1-(1-miss)^k
 
-local base_gr_rotation_factor = 20.00 ----- degree
-local base_launcher_rotation_factor = 12.00 ----- degree
-local grenade_length_factor = 0.1 -- 0.088 -- 
-local launcher_length_factor = 0.088
-------
-local stat_factor_perfect_throw = 20
-local min_stat_to_roll_perfect_throw = 0
-local critical_roll_threshold = 0
---------
+local dir_bias = 2 ---- expoente INTEIRO. 1 = isotropico. >1 concentra no eixo do arremesso
+local short_mul = 100 ---- % do lado que volta pro arremessador. 100 = simetrico, <100 encurta
+local launcher_r_pct = 100 ---- % do raio para GL/RPG (no motor antigo eles desviavam ~12% menos)
 
-local perfect_throw_threshold = 0
-local potent = 2
-local magnitude_effect = 100
+local stat_factor_perfect_throw = 26 ---- gate = stat * isto / 100; roll abaixo dele = acerto exato
+
+---- rotulos por distancia absoluta, em milesimos de tile.
+---- O texto significa a MESMA coisa para qualquer merc e qualquer granada: a skill muda
+---- com que frequencia cada um sai, nao o que ele quer dizer.
+---- ATENCAO: sao derivados da distribuicao. Mexeu em r_min/r_max/dev_shape, recalibre
+---- (a bancada tem o botao "Calibrar rotulos").
+local label_great_tiles = 1000
+local label_good_tiles = 2000
+local label_inacc_tiles = 3500
+
 local num_dice = 2
 ---------
 
@@ -95,118 +123,123 @@ local function throw_dice(max_value, num_dice, unit)
     return total
 end
 
+---- eleva um valor em milesimos a um expoente inteiro, mantendo a escala de milesimos
+local function pow_milli(v, k)
+    local r = 1000
+    for _ = 1, k do
+        r = MulDivRound(r, v, 1000)
+    end
+    return r
+end
+
+---- raio do erro em milesimos de tile, a partir do roll e do stat da UI
+local function deviation_radius(stat, roll, is_grenade)
+    local gate = MulDivRound(stat, stat_factor_perfect_throw, 100)
+    if roll <= gate then
+        return 0, gate
+    end
+    ---- miss em milesimos: onde este roll cai entre o gate e o pior roll possivel
+    local miss = MulDivRound(roll - gate, 1000, 100 - gate)
+    local curve = pow_milli(miss, dev_shape)
+    if dev_shape_mirror then
+        curve = 1000 - pow_milli(1000 - miss, dev_shape)
+    end
+
+    local r_min = Max(0, r_min_base - MulDivRound(r_min_scale, stat, 100))
+    local r_max = Max(r_min, r_max_base - MulDivRound(r_max_scale, stat, 100))
+    local r = r_min + MulDivRound(r_max - r_min, curve, 1000)
+
+    if not is_grenade and launcher_r_pct ~= 100 then
+        r = MulDivRound(r, launcher_r_pct, 100)
+    end
+    return r, gate
+end
+
 function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, test)
 
     local is_grenade = IsKindOf(self, "Grenade")
-    local thrower_perk, max_range
-    local ai_handicap = 0 -- AI_deviate_handicap(unit) or 0
     local ai_modifier = AI_deviate_skill_diff(unit) or 0
-    local wound_penalty = EO_GetWoundPenalty_Deviation(unit)
 
-    if is_grenade then
-        thrower_perk = HasPerk(unit, "Throwing")
-        max_range = self:GetMaxAimRange(unit)
-        if thrower_perk then
-            max_range = max_range + CharacterEffectDefs.Throwing:ResolveValue("RangeIncrease") or 0
-        end
-    else
-        max_range = self.WeaponRange
-    end
-
+    ---- BUGFIX (B9): o wound_penalty ja foi descontado dentro de GetDeviationModifier.
+    ---- A versao antiga somava ele de volta aqui, o que anulava o Wounded por completo
+    ---- e fazia a tooltip mentir. Aqui o stat da UI entra inteiro, sem correcao.
     local stat = self:GetMishapChance(unit, target_pos)[1]
-    local stat_based_perfect_throw = stat >= min_stat_to_roll_perfect_throw and stat / 100.00 *
-                                         stat_factor_perfect_throw or 0
+    stat = Max(0, Min(100, stat - ai_modifier))
 
-    stat = stat + base_skill_modifier - ai_modifier + ai_handicap + wound_penalty
-    local deviation = 0
     local roll = throw_dice(100, num_dice, unit) + 1
     roll = CheatEnabled("AlwaysHit") and 1 or roll
-    roll = CheatEnabled("AlwaysMiss") and 100 or roll -- InteractionRand(100, "RATONADE_DeviationRoll", unit) + 1 -- 1 + unit:Random(100)
-    local diff = stat - roll
+    roll = CheatEnabled("AlwaysMiss") and 99 or roll
 
-    local min_deviation = diff >= 50 and 0 or def_min_dev
+    local radius, gate = deviation_radius(stat, roll, is_grenade)
 
-    local rotation_factor = is_grenade and base_gr_rotation_factor or base_launcher_rotation_factor
-
-    if roll <= (critical_roll_threshold + stat_based_perfect_throw) then
-        deviation = 0
-    else
-        deviation = Max(min_deviation,
-                        ((magnitude_effect - diff * 1.00) ^ potent / magnitude_effect ^ potent) * 2)
-    end
-
-    -- deviation = CheatEnabled("AlwaysHit") and 0 or deviation
-    -- deviation = CheatEnabled("AlwaysMiss") and 5 or deviation
     if Platform.developer and not test then
         print("----RATONADE - DEBUG deviation")
-        print("roll", roll, "stat", stat, "diff", diff, "deviation", deviation)
+        print("roll", roll, "stat", stat, "gate", gate, "raio(milesimos de tile)", radius)
     end
 
     if test then
-        return deviation, roll
+        return radius, roll
     end
 
-    local perfect_throw = deviation <= perfect_throw_threshold
-    local float_text
-    if is_grenade then
-        if perfect_throw then
-            float_text = T("Perfect Throw")
-        elseif deviation <= great_throw_threshold then
-            float_text = T("Great Throw")
-        elseif deviation >= 3.2 then
-            float_text = T("<color AmmoAPColor>Terrible Throw</color>")
-        elseif deviation >= dev_thrs_innac_throw then
-            float_text = T("<color AmmoAPColor>Innacurate Throw</color>")
-        end
-    else
-        if perfect_throw then
-            float_text = T("Perfect Launch")
-        elseif deviation <= great_throw_threshold then
-            float_text = T("Great Launch")
-        elseif deviation >= 3.2 then
-            float_text = T("<color AmmoAPColor>Terrible Launch</color>")
-        elseif deviation >= dev_thrs_innac_throw then
-            float_text = T("<color AmmoAPColor>Innacurate Launch</color>")
-        end
-    end
-
-    if float_text then
-        CreateFloatingText(target_pos, float_text)
-    end
-
-    if perfect_throw then
+    ---- acerto exato: quem chama trata o false como "nao desviou"
+    if radius <= 0 then
+        CreateFloatingText(target_pos, T("Perfect Throw"))
         return false
     end
 
-    if deviation <= great_throw_threshold then
-        rotation_factor = rotation_factor * accurate_angle_mul
-    end
-
-    local sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
-    sign = sign == 1 and 1 or -1
-    local angle_of_rotation = rotation_factor * 60 * deviation / 5 * sign
     local dir = target_pos - attack_pos
-
-    sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
-    sign = sign == 1 and 1 or -1
-
-    local length_factor = is_grenade and grenade_length_factor or launcher_length_factor
-    local distance_multiplier = length_factor * deviation * sign
-
-    local distance_deviation = dir:Len() * (1 + distance_multiplier)
-
-    if is_grenade and sign > 0 then
-        distance_deviation = distance_deviation <= cRound(max_range * 1.5) and distance_deviation or
-                                 dir:Len() * (1 + distance_multiplier * -1)
+    dir = point(dir:x(), dir:y(), 0)
+    if dir:Len() == 0 then
+        return false
     end
+
+    ---- direcao: theta = 90deg * sinal(u) * |u|^dir_bias, u uniforme em [-1000, 1000].
+    ---- dir_bias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
+    ---- em vez de espalhar para os lados.
+    local u = InteractionRand(2001, "RATONADE_DeviationDir", unit) - 1000
+    local sign = u < 0 and -1 or 1
+    local shaped = pow_milli(abs(u), dir_bias)
+    local angle = sign * MulDivRound(90 * 60, shaped, 1000)
+    if InteractionRand(2, "RATONADE_DeviationFlip", unit) == 1 then
+        angle = angle + 180 * 60
+    end
+
+    local radius_world = MulDivRound(radius, const.SlabSizeX, 1000)
+    local offset = Rotate(SetLen(dir, radius_world), angle)
+
+    ---- short_mul < 100 encurta so a metade que volta na direcao do arremessador
+    if short_mul ~= 100 then
+        local fwd = SetLen(dir, 4096)
+        local along = MulDivRound(offset:x(), fwd:x(), 4096) + MulDivRound(offset:y(), fwd:y(), 4096)
+        if along < 0 then
+            local cut = MulDivRound(along, 100 - short_mul, 100)
+            offset = offset - point(MulDivRound(fwd:x(), cut, 4096), MulDivRound(fwd:y(), cut, 4096), 0)
+        end
+    end
+
+    ---- o erro e uma distancia ATE O ALVO, nao uma fracao do vetor de arremesso
+    local final_pos = target_pos + offset
+
+    ---- o rotulo sai do erro REAL em tiles, entao tem que ser calculado depois da
+    ---- geometria. Na versao antiga o texto era emitido antes, olhando o deviation.
+    local err = MulDivRound(offset:Len(), 1000, const.SlabSizeX)
+    local float_text
+    if err <= label_great_tiles then
+        float_text = is_grenade and T("Great Throw") or T("Great Launch")
+    elseif err <= label_good_tiles then
+        float_text = is_grenade and T("Good Throw") or T("Good Launch")
+    elseif err <= label_inacc_tiles then
+        float_text = is_grenade and T("<color AmmoAPColor>Innacurate Throw</color>") or
+                         T("<color AmmoAPColor>Innacurate Launch</color>")
+    else
+        float_text = is_grenade and T("<color AmmoAPColor>Terrible Throw</color>") or
+                         T("<color AmmoAPColor>Terrible Launch</color>")
+    end
+    CreateFloatingText(target_pos, float_text)
 
     DbgAddCircle_devi(target_pos, const.SlabSizeX / 6, const.clrGreen)
     DbgAddVector_devi(attack_pos, dir, const.clrGreen)
-
-    local rotated_vector = Rotate(dir, angle_of_rotation)
-    rotated_vector = SetLen(rotated_vector, distance_deviation)
-    DbgAddVector_devi(attack_pos, rotated_vector, const.clrRed)
-    local final_pos = attack_pos + rotated_vector
+    DbgAddVector_devi(target_pos, offset, const.clrRed)
 
     return final_pos
 end
