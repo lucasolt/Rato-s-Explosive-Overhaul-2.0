@@ -271,7 +271,7 @@ local pctl_rolls = {{10, 22}, {25, 35}, {50, 50}, {75, 65}, {90, 78}}
 ---- na pratica, entao virou um liga/desliga simples.)
 ---- ---------------------------------------------------------------------------
 if EO_DeviationDebug == nil then
-    EO_DeviationDebug = true
+    EO_DeviationDebug = false
 end
 if EO_DeviationRings == nil then
     EO_DeviationRings = true
