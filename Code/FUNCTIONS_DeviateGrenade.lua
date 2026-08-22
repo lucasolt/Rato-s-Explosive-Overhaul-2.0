@@ -155,6 +155,49 @@ local function deviation_radius(stat, roll, is_grenade)
     return r, gate
 end
 
+---- Rolls que caem em cada percentil do dado (2 x InteractionRand(50), roll 1..99).
+---- Como o raio e monotonico no roll, o percentil do raio e o raio DO percentil do roll.
+local pctl_rolls = {{10, 22}, {25, 35}, {50, 50}, {75, 65}, {90, 78}}
+
+---- Desenha, em volta do alvo, os aneis de percentil deste arremessador e os
+---- limiares dos rotulos. Ligue/desligue ao vivo pelo console: EO_DeviationRings = false
+EO_DeviationRings = EO_DeviationRings ~= false
+
+function EO_DrawDeviationRings(target_pos, stat, is_grenade)
+    if not EO_DeviationRings or not target_pos then
+        return
+    end
+    if DbgClear then
+        DbgClear()
+    end
+
+    ---- limiares dos rotulos: fixos em tiles, iguais para todo merc e toda granada
+    local labels = {
+        {label_great_tiles, const.clrGreen},
+        {label_good_tiles, const.clrYellow},
+        {label_inacc_tiles, const.clrOrange}
+    }
+    for _, row in ipairs(labels) do
+        DbgAddCircle_devi(target_pos, MulDivRound(row[1], const.SlabSizeX, 1000), row[2])
+    end
+
+    ---- percentis do arremessador: onde a granada dele cai em 10/25/50/75/90% dos casos
+    for _, row in ipairs(pctl_rolls) do
+        local r = deviation_radius(stat, row[2], is_grenade)
+        if r > 0 then
+            local c = (row[1] == 50) and const.clrCyan or const.clrBlue
+            DbgAddCircle_devi(target_pos, MulDivRound(r, const.SlabSizeX, 1000), c)
+        end
+    end
+
+    if Platform.developer then
+        local p50 = deviation_radius(stat, 50, is_grenade)
+        local p90 = deviation_radius(stat, 78, is_grenade)
+        print("----RATONADE - aneis", "stat", stat, "p50", p50, "p90", p90,
+              "| rotulos", label_great_tiles, label_good_tiles, label_inacc_tiles)
+    end
+end
+
 function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, test)
 
     local is_grenade = IsKindOf(self, "Grenade")
@@ -180,6 +223,8 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     if test then
         return radius, roll
     end
+
+    EO_DrawDeviationRings(target_pos, stat, is_grenade)
 
     ---- acerto exato: quem chama trata o false como "nao desviou"
     if radius <= 0 then
@@ -237,9 +282,9 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     end
     CreateFloatingText(target_pos, float_text)
 
-    DbgAddCircle_devi(target_pos, const.SlabSizeX / 6, const.clrGreen)
-    DbgAddVector_devi(attack_pos, dir, const.clrGreen)
+    ---- onde caiu de verdade: ponto branco na ponta do vetor vermelho
     DbgAddVector_devi(target_pos, offset, const.clrRed)
+    DbgAddCircle_devi(final_pos, const.SlabSizeX / 5, const.clrWhite)
 
     return final_pos
 end
