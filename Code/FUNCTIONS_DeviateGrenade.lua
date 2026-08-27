@@ -482,9 +482,9 @@ function GetDeviationModifier(item, unit, target, stat, diff_dist, opt_diff)
     modifiers = (unit:HasStatusEffect("Blinded") or unit:HasStatusEffect("dazed_flashbang")) and
                     modifiers + blind_dazed_penalty or modifiers
 
-    if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
-        modifiers = modifiers and modifiers + rainHeavyPenalty or 10
-    end
+    --if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
+    --    modifiers = modifiers and modifiers + rainHeavyPenalty or 10
+    --end
     ---- [1] e o que a UI mostra e o que o motor usa. Os demais existem so para o
     ---- print de debug conseguir mostrar de onde o numero veio.
     if EO_DeviationDebugRoll then
@@ -543,7 +543,7 @@ function Grenade:get_throw_accuracy(unit)
     end
 
     if IsKindOf(self, "ShapedCharge") then
-        acc = unit and unit.unitdatadef_id == "Barry" and acc or acc - 25
+        acc = unit and unit.unitdatadef_id == "Barry" and acc + const.EO.ShapedChargeBarryAccBonus or acc + const.EO.ShapedChargeAccPenalty
     end
     return acc
 end

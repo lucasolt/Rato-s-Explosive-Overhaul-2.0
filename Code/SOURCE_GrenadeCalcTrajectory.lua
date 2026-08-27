@@ -46,6 +46,8 @@ function Grenade:CalcTrajectory(attack_args, target_pos, angle, max_bounces, att
 	-- local bounce_target_pos = grenade_pos + MulDivRound(dir, 1000, coeff)
 	-- vec = CalcLaunchVector(grenade_pos, bounce_target_pos, angle, const.Combat.Gravity)
 	-- else
+
+	
 	vec = CalcLaunchVector(grenade_pos, target_pos, angle, const.Combat.Gravity)
 	-- end
 	local time = MulDivRound(grenade_pos:Dist2D(target_pos), 1000, Max(vec:Len2D(), 1))
