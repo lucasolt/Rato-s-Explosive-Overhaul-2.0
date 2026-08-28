@@ -67,6 +67,10 @@ function Grenade:GetAttackResults(action, attack_args)
                                                                               attack_pos, self)
             if ai_angle then
                 attack_args.rat_angle = ai_angle
+                ---- BUGFIX (B10): marca que este angulo veio da compensacao de bounce.
+                ---- O par (angulo, ponto de mira) foi resolvido junto la dentro, entao o
+                ---- GetTrajectory NAO pode trocar so o angulo depois do desvio.
+                attack_args.rat_bounce_aim = true
             end
         end
 
@@ -140,8 +144,20 @@ function Grenade:GetAttackResults(action, attack_args)
 		end ]]
         --------
 
-        trajectory = not deviate and (ai_trajectory or traj) or
-                         self:GetTrajectory(attack_args, attack_pos, target_pos, mishap)
+        ---- BUGFIX (B11): quando houve desvio, a trajetoria e RECALCULADA aqui -- e a
+        ---- recalculada e uma parabola direta, sem o ricochete que o ai_trajectory ja
+        ---- trazia embutido. Guardar esse fato para o bloco de bounce la embaixo, que
+        ---- antes olhava so para "ai_trajectory" (o sinal PRE-desvio) e por isso pulava
+        ---- o get_bounces justamente no caso em que ele passou a ser necessario.
+        local using_ai_trajectory = ai_trajectory and not deviate
+
+        ---- mesma semantica do "not deviate and (ai_trajectory or traj) or GetTrajectory()"
+        ---- original: sem trajetoria pronta (predicao, por exemplo) ainda cai no calculo.
+        if not deviate and (ai_trajectory or traj) then
+            trajectory = ai_trajectory or traj
+        else
+            trajectory = self:GetTrajectory(attack_args, attack_pos, target_pos, mishap)
+        end
         ----------------------------------
 
         if #trajectory > 0 then
@@ -157,7 +173,13 @@ function Grenade:GetAttackResults(action, attack_args)
 
         ------------Bounce block
 
-        if not ai_trajectory and #trajectory > 0 and can_bounce and not mishap then
+        ---- BUGFIX (B11): a guarda era "not ai_trajectory", que continuava valendo mesmo
+        ---- depois de a trajetoria ter sido recalculada por causa do desvio. Resultado:
+        ---- granada de IA com bounce, ao desviar, virava parabola direta e explodia na
+        ---- primeira colisao -- sem ricochete nenhum, como se can_bounce fosse falso.
+        ---- Agora a guarda olha para a trajetoria ATUAL: so pula quando ela e mesmo a
+        ---- ai_trajectory, que ja vem com o ricochete embutido.
+        if not using_ai_trajectory and #trajectory > 0 and can_bounce and not mishap then
             -- print("entering bounce block", GameTime())
             for i, step in ipairs(trajectory) do
                 DbgAddCircle_rat(attack_args, step.pos, const.SlabSizeX / 10, const.clrCyan)

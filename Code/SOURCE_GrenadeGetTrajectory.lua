@@ -1,3 +1,24 @@
+---- Candidatos de angulo para um arremesso direto, conforme o desnivel attack->target.
+---- Extraido do corpo do GetTrajectory para poder ser reusado como FALLBACK quando o
+---- angulo ja comprometido nao serve mais (ver BUGFIX (B10) abaixo).
+local function EO_default_launch_angles(attack_pos, target_pos)
+    local angles = {}
+    if target_pos:z() - attack_pos:z() >= 2 * const.SlabSizeZ then
+        angles[1] = const.Combat.GrenadeLaunchAngle_Incline
+        angles[2] = const.Combat.GrenadeLaunchAngle
+    else
+        -- throwing down/level, prefer low arc
+        if target_pos:z() - attack_pos:z() <= const.SlabSizeZ / 2 then
+            angles[1] = const.Combat.GrenadeLaunchAngle_Low
+        end
+        angles[#angles + 1] = const.Combat.GrenadeLaunchAngle
+        if not GameState.Underground then
+            angles[#angles + 1] = const.Combat.GrenadeLaunchAngle_Incline
+        end
+    end
+    return angles
+end
+
 function Grenade:GetTrajectory(attack_args, attack_pos, target_pos, mishap, bounce, bounce_angle)
     if not attack_pos and attack_args.lof then
         local lof_idx = table.find(attack_args.lof, "target_spot_group",
@@ -37,21 +58,25 @@ function Grenade:GetTrajectory(attack_args, attack_pos, target_pos, mishap, boun
 
     if attack_args.rat_angle and not bounce_angle and not mishap then
         angles = {attack_args.rat_angle}
-        -- elseif valid_target or mishap and not bounce then 
-    elseif valid_target or mishap or attack_args.rat_deviate and not bounce_angle then
-        if target_pos:z() - attack_pos:z() >= 2 * const.SlabSizeZ then
-            angles[1] = const.Combat.GrenadeLaunchAngle_Incline
-            angles[2] = const.Combat.GrenadeLaunchAngle
-        else
-            -- throwing down/level, prefer low arc
-            if target_pos:z() - attack_pos:z() <= const.SlabSizeZ / 2 then
-                angles[1] = const.Combat.GrenadeLaunchAngle_Low
-            end
-            angles[#angles + 1] = const.Combat.GrenadeLaunchAngle
-            if not GameState.Underground then
-                angles[#angles + 1] = const.Combat.GrenadeLaunchAngle_Incline
+        ---- BUGFIX (B10): o rat_angle foi escolhido contra o alvo ORIGINAL, antes do
+        ---- desvio. Reusar ele sozinho contra o ponto ja desviado testava UMA parabola
+        ---- so: se ela batia num obstaculo, a granada parava ali, mesmo quando um arco
+        ---- mais alto passaria por cima. Aqui o angulo comprometido continua sendo o
+        ---- PRIMEIRO candidato (o loop abaixo para nele assim que cair a <=1 tile do
+        ---- alvo, entao o caso comum nao muda), e os demais entram so como fallback.
+        ---- Nao vale para o arremesso da IA com bounce: la o par (angulo, ponto de mira
+        ---- compensado) foi resolvido junto pelo AI_adj_targetpos_for_bounce e trocar o
+        ---- angulo sozinho ignoraria a logica de ricochete -- ver rat_bounce_aim.
+        if attack_args.rat_deviate and not attack_args.rat_bounce_aim then
+            for _, a in ipairs(EO_default_launch_angles(attack_pos, target_pos)) do
+                if a ~= attack_args.rat_angle then
+                    angles[#angles + 1] = a
+                end
             end
         end
+        -- elseif valid_target or mishap and not bounce then
+    elseif valid_target or mishap or attack_args.rat_deviate and not bounce_angle then
+        angles = EO_default_launch_angles(attack_pos, target_pos)
     end
 
     -------------------

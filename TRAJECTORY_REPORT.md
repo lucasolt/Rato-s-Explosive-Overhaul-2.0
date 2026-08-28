@@ -1,6 +1,11 @@
 # TRAJECTORY_REPORT.md — a trajetória até o ponto desviado
 
-Diagnóstico apenas, sem alterações de código. Escopo: **não** é o motor de desvio
+> **Status: aplicado.** `BUGFIX (B10)` (seleção de ângulo pós-desvio) e `BUGFIX (B11)`
+> (ricochete pulado no arremesso desviado da IA) estão no código — ver seção 7.
+> As seções 1–6 descrevem o diagnóstico original, que continua valendo como
+> justificativa das duas mudanças.
+
+Escopo: **não** é o motor de desvio
 (`Code/FUNCTIONS_DeviateGrenade.lua`, já reescrito — ver `DEVIATION_REPORT.md`, que
 descreve o motor antigo e está desatualizado nesse ponto). O problema aqui é o que
 acontece **depois** que o ponto desviado existe: qual trajetória a granada percorre
@@ -174,7 +179,10 @@ falso. Isso é independente do bug do item 3 e provavelmente pesa mais no sintom
 descrito (a granada "batendo e parando antes" seria, no caso de IA, uma granada que
 deveria ricochetear e não ricocheteia).
 
-Não tenho uma correção pronta para este caso — ao contrário do item 3, aqui não dá para
+> Resolvido como `BUGFIX (B11)` (a consequência **b**), mantendo o par ângulo/ponto de
+> mira intacto — ver seção 7. O parágrafo abaixo é o raciocínio original.
+
+Não tinha uma correção pronta para este caso — ao contrário do item 3, aqui não dá para
 simplesmente "destravar" o teste de ângulos, porque o problema não é falta de teste, é
 que o alvo do teste (o ponto de mira compensado) e o critério de sucesso (chegar perto
 do ponto de mira) já não descrevem o que se quer quando o alvo real mudou por desvio.
@@ -193,7 +201,9 @@ Um encaminhamento possível, a validar depois:
 Qualquer uma das duas precisa de teste dedicado antes de mexer — este é o ponto do
 relatório com mais incerteza, e foi sinalizado pelo autor como tal.
 
-## 5. O que a correção do caso não-IA (item 3) provavelmente é (não aplicada)
+## 5. O que a correção do caso não-IA (item 3) provavelmente é
+
+> Aplicada como `BUGFIX (B10)`, na variante "primeiro candidato + fallback" — ver seção 7.
 
 Não é preciso inventar um critério de escolha novo — o critério "testa até 3 ângulos,
 prefere o que cai a ≤1 tile do alvo, senão o de menor distância" já é razoável e já
@@ -239,3 +249,94 @@ arremesso pré-desvio.
   = true` mostra o raio/direção do desvio, e os `DbgAddCircle_rat` já espalhados em
   `GetAttackResults` (linha ~163) desenham os passos da trajetória final — dá para ver
   ao vivo a granada parando na primeira colisão da única parábola testada.
+
+---
+
+## 7. O que foi aplicado
+
+Duas correções, com marcadores `BUGFIX (B10)` e `BUGFIX (B11)` (B9 era o maior em uso
+neste repo).
+
+### B10 — o ângulo comprometido vira o *primeiro* candidato, não o único
+
+`Code/SOURCE_GrenadeGetTrajectory.lua`. A lista de candidatos padrão saiu do corpo do
+`GetTrajectory` para uma helper (`EO_default_launch_angles`), e o ramo do `rat_angle`
+passou a anexar os demais ângulos **como fallback** quando `attack_args.rat_deviate`
+está ligado:
+
+```lua
+angles = {attack_args.rat_angle}
+if attack_args.rat_deviate and not attack_args.rat_bounce_aim then
+    for _, a in ipairs(EO_default_launch_angles(attack_pos, target_pos)) do
+        if a ~= attack_args.rat_angle then angles[#angles + 1] = a end
+    end
+end
+```
+
+O ponto fino: **o ângulo comprometido continua sendo testado primeiro**, e o loop de
+seleção já existente para nele assim que a trajetória cai a ≤1 tile do ponto desviado
+(`IsCloser(hit_pos, target_pos, const.SlabSizeX)` → `break`). Ou seja, o caso comum não
+muda em comportamento nem em custo — só quando o arco comprometido *falha* é que os
+outros são simulados. O critério de escolha é o que já existia (mais perto do alvo
+vence), não foi inventado nada novo.
+
+Isso preserva o caos pedido: num arremesso ruim o ponto desviado está longe, e a melhor
+das três parábolas ainda pousa longe do alvo real. O que deixa de acontecer é a granada
+parar num obstáculo que um arco mais alto teria limpado.
+
+### B11 — o ricochete voltou a existir no arremesso desviado da IA
+
+`Code/SOURCE_GrenadeGetAttackResults.lua`. Era o achado mais grave da seção 4: a guarda
+do bloco de bounce olhava para `ai_trajectory` (o sinal *pré*-desvio) e por isso pulava
+`get_bounces` exatamente quando a trajetória tinha acabado de ser recalculada por causa
+do desvio. Resultado: granada de IA com bounce, ao desviar, virava parábola direta e
+explodia na primeira colisão — como se `can_bounce` fosse falso. Agora existe um
+`using_ai_trajectory` explícito, e a guarda olha para a trajetória **atual**.
+
+Sobre a particularidade levantada (o par ângulo + ponto de mira compensado que o
+`AI_adj_targetpos_for_bounce` resolve junto, com 40 tentativas): a escolha aqui foi
+**manter o par intacto e deixar o ricochete ser simulado honestamente a partir de onde a
+granada de fato bater**. O `attack_args.rat_bounce_aim` marca que aquele ângulo veio da
+compensação de bounce, e o B10 respeita a marca — não troca o ângulo nesse caso. A
+compensação continua valendo como intenção da IA; o desvio perturba o resultado, que é
+o que desvio deve fazer. E não reexecuta a busca cara.
+
+Fica registrado o caminho alternativo, mais correto fisicamente e mais caro, caso um dia
+se queira: aplicar o desvio **antes** do `AI_adj_targetpos_for_bounce`, sobre o alvo
+real, e deixar a busca resolver o par para o alvo já desviado — ao custo de até 40
+`GetTrajectory` a mais por arremesso de IA com desvio (ver `PERF_PLAN.md`).
+
+### Verificação
+
+`tools/traj_angle_test.lua` carrega o `GetTrajectory` **real** com a engine stubada e
+cobre os cinco casos. Roda sem o jogo, a partir da raiz do repo:
+
+```
+$ lua5.3 tools/traj_angle_test.lua
+1. normal, sem desvio (rat_angle=Low)     angulos testados=600            pousou x=500
+2. DESVIADO, nao-IA (B10 deve expandir)   angulos testados=600,2700,4500  pousou x=1000
+3. DESVIADO, IA bounce (nao expande)      angulos testados=600            pousou x=500
+4. sem rat_angle (ramo elseif de sempre)  angulos testados=600,2700,4500  pousou x=1000
+5. DESVIADO mas o angulo ainda serve      angulos testados=600            pousou x=1000
+```
+
+Os casos 1, 3 e 5 são os que provam que **nada mudou** onde não devia: sem desvio, no
+ramo de bounce da IA, e quando o ângulo comprometido já resolve (aí ele para no primeiro
+candidato, sem custo extra).
+
+O que o teste **não** cobre, e precisa de partida real: o B11 (depende de
+`get_bounces`/colisão da engine) e a sensação do B10 em mapa de verdade. Para isso, com
+o jogo no `JA3Debug.exe` e a sonda do `DEBUG SERVER.md`:
+
+```lua
+-- confirma que as duas flags novas existem e estão sendo escritas
+tostring(rawget(_G, "EO_default_launch_angles"))   -- nil: é local do arquivo, esperado
+tostring(const.Combat.GrenadeLaunchAngle_Low) .. " / " ..
+    tostring(const.Combat.GrenadeLaunchAngle) .. " / " ..
+    tostring(const.Combat.GrenadeLaunchAngle_Incline)
+```
+
+e, jogando com `EO_DeviationDebug = true`, os `DbgAddCircle_rat` do bloco de bounce
+passam a aparecer nos arremessos desviados da IA — antes do B11 eles simplesmente não
+eram desenhados, porque o bloco inteiro era pulado. É o sinal visual mais direto de que
+a correção pegou.
