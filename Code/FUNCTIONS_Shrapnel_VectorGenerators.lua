@@ -9,7 +9,9 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 	local n = 0
 
 	local angle_radians = args.angle_deg * pi / 180
-	local h_max = radius * tan(angle_radians / 2)
+	---- so a chamada de tan sai do laco; a ordem das multiplicacoes de h continua sendo a
+	---- original (random * radius * tan), para nao mexer no arredondamento.
+	local tan_half = tan(angle_radians / 2)
 	local radius_sq = radius * radius
 	local two_pi = 2 * pi
 	local cx, cy, cz = center:x(), center:y(), center:z()
@@ -22,7 +24,7 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 
 	for i = 1, numPositions do
 		local theta = random() * two_pi
-		local h = random() * h_max
+		local h = random() * radius * tan_half
 
 		local p = point(cx + cos(theta) * h, cy + sin(theta) * h, cz + sqrt(radius_sq - h * h))
 		p = RotateAxis(p, axis_x_p, 90 * 60, center)

@@ -356,6 +356,32 @@ arredondam diferente) e trocar a associação de `sin*cos*radius + centro` por
 `(sin*radius)*cos + centro`. Nos dois casos a contagem de sobreviventes batia e só as
 coordenadas mudavam no último bit — exatamente o tipo de coisa que só aparece comparando.
 
+### Achado durante o C4/C5: o caminho do cone está morto
+
+Ao otimizar `generateShrapnelPositionsInCone` ficou claro que **ele nunca roda**. O
+gatilho é `if self.coneShaped then` (`FUNCTIONS_Shrapnel.lua`), e `coneShaped` não é
+definido nem atribuído em lugar nenhum do mod:
+
+```
+$ grep -rin "coneShaped\|coneAngle" --include=*.lua .
+Code/FUNCTIONS_Shrapnel.lua:121:    if self.coneShaped then      <- unica LEITURA
+Code/PATCH_EO_explosives.lua:87:   ShapedCharge.coneAngle= 40
+```
+
+Nada em `items.lua`, nada em `PROPERTIES_Explosives.lua`. Ou seja: `self.coneShaped` é
+`nil` para todo explosivo, a ShapedCharge dispersa estilhaço em esfera como qualquer
+outro, e o `ShapedCharge.coneAngle = 40` recém-adicionado não tem efeito nenhum — falta
+o `ShapedCharge.coneShaped = true` ao lado dele.
+
+Isto **não foi corrigido aqui**: ligar o cone troca a dispersão da ShapedCharge de
+esférica para cônica, o que é mudança de balanço e decisão do autor, não de uma leva de
+performance. As otimizações C4/C5 ficam prontas para quando o caminho for ligado.
+
+Vale notar que, quando ligar, o C5 muda a contagem em 1 estilhaço para a ShapedCharge
+(`r_shrap_num` 350, cone 40°): 60 → 61, porque `MulDivRound` arredonda onde o `/` da
+engine truncava. E o A3 (o `1.12` sobre o Z absoluto) só passa a ter efeito real a
+partir daí — é no cone que ele vive.
+
 ### O que NÃO foi feito, e por quê
 
 **Rejeitar por raycast o estilhaço que entra no chão** — a leitura literal do pedido — não
