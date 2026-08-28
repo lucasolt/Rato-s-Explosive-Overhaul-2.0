@@ -2,7 +2,7 @@ return PlaceObj('ModDef', {
 	'title', "Rato's Explosive Overhaul 2.0",
 	'description', "[b]Disclaimer: This mod can be very perfomance hungry[/b]\n\nThis mod is dedicated to [b]Toni[/b].\n\n-- Compatible with Revised Tactical Gear II\n\n[h1]Features:[/h1]\n\n[b]Reworked Mishap System[/b]: Throwing a grenade now involves a skill check. The worse the skill check, the greater the deviation. Distance increases the difficulty of the check. This change is granular and dimensional, moving away from the previous all-or-nothing approach. No more pixel perfect grenades. Applies to all explosives except Mortars, which keep the old mishap system.\n\nHeavy Rain, and some status effect, like Innacurate or Blinded/Dazed, will reduce throw accuracy.\nIf the Heavy Wounds is enabled, wounds will reduce throwing accuracy.\n\n[b]Grenade Bouncing[/b]: Grenades now bounce off surfaces with realistic physical simulation. Factors such as throw speed, grenade shape, weight, surface impact, and angle of trajectory all affect the bounce.\n\n[b]Simulated Shrapnel[/b]: Each piece of grenade shrapnel is individually simulated, enhancing the realism of explosions. Shrapnel has no armor penetration and can cause bleeding and other status effects when it hits a bodypart. Be aware that the shrapnel damage, being dynamic, will not be shown at the damage portion of the grenade. High shrapnel grenades will do about +25/+35 dmg to unarmored enemies inside the primary blast radius\n\n[b]Improvised Explosive Devices (IEDs)[/b]: (Most) Crafted explosives are now classified as IEDs with a chance of malfunction (Optional). Malfunctions can result in the grenade being inert, timed, or proximity-based, and the player won't know which until it happens. The malfunction chance is determined by the crafting unit's explosive skill (Temporarily using the thrower skill instead). Legion and Thugs will mostly use IED explosives.\n\n[b]New Explosives[/b] -\nIEDS: Nail Bomb, Fragmentary TNT Stick, Smoke and Tear Gas Can Grenades, Improvised Flashbang\nOther: High Explosive (MK3) grenade, Incendiary Grenade\n\n[b]Other Changes[/b]:\nAI will correctly compensate simple bounces. Does not conflict with AI mods.\nHand explosives range is sligthly increased.\nFlashbangs will cause the dazed (-40% cth), supress, and cancel readied attacks.\nExplosive Skill no longer increases the damage of the grenade.\nMod options to manipulate Explosives damage, throw difficulty and more.\nA mod option will let you customize the activation radius of proximity based explosives. Does not affect Landmines.\n\nif you want to buy me a coffee you can do so here:\nhttps://www.buymeacoffee.com/rato_modder\n\nFeedback is highly appreciated, balance is WIP",
 	'image', "Mod/RATONADE/Images/preview.JPG",
-	'last_changes', "2.21\nfixed a bug that could cause AI to fail to get a position for explosion of a grenade",
+	'last_changes', "2.22\n\nLogic that generates deviated position for a throw was refactored, expect less wild and varied results\nHeavy rain no longer decreases throw accuracy, instead it increases IED misfire chance\nDazed (flashbang) CTH penalty from -40 to -30",
 	'dependencies', {
 		PlaceObj('ModDependency', {
 			'id', "JA3_CommonLib",
@@ -14,8 +14,8 @@ return PlaceObj('ModDef', {
 	'id', "RATONADE",
 	'author', "rato",
 	'version_major', 2,
-	'version_minor', 21,
-	'version', 3846,
+	'version_minor', 22,
+	'version', 3862,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'entities', {
@@ -30,6 +30,7 @@ return PlaceObj('ModDef', {
 		"CharacterEffect/cancel_shot_flashbang.lua",
 		"CharacterEffect/dazed_flashbang.lua",
 		"Code/____init_globals.lua",
+		"Code/__EOParams.lua",
 		"Code/CUAE_Params.lua",
 		"Code/SOURCE_CalcBounceParabola_LUA.lua",
 		"Code/SOURCE_SectorOperations_CraftCommonBase_Tick.lua",
@@ -111,8 +112,8 @@ return PlaceObj('ModDef', {
 		shrap_num = "100",
 	},
 	'has_data', true,
-	'saved', 1787367866,
-	'code_hash', -2478998376351366037,
+	'saved', 1787784993,
+	'code_hash', -989526931048254507,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "CharacterEffectCompositeDef",

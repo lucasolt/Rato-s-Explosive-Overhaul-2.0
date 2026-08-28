@@ -29,6 +29,11 @@ function processIEDmisfire(weapon, unit)
             ObjModified(weapon)
         end
 
+		if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
+    	    chance = MulDivRound(chance, const.EO.HeavyRainIEDMisfireMul, 100)
+    	end
+
+
         chance = Max(1, MulDivRound(chance, opt, 100))
         --[[ 		print("pos process stack qual", weapon.ied_quality_stack)
 		print("chance", chance) ]]

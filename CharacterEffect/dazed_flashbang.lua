@@ -92,10 +92,10 @@ DefineClass.dazed_flashbang = {
 			Event = "OnCalcChanceToHit",
 			Handler = function (self, target, attacker, action, attack_target, weapon1, weapon2, data)
 				if target == attacker then
-					local dazed_Cth = {id = "dazed_cth", name = T{"Dazed"}, value = -40}
+					local dazed_Cth = {id = "dazed_cth", name = T{"Dazed"}, value = const.EO.DazedCTHPenalty}
 					data.modifiers = data.modifiers or {}
 					table.insert(data.modifiers, dazed_Cth)
-					data.mod_add = data.mod_add -40
+					data.mod_add = data.mod_add + const.EO.DazedCTHPenalty
 				end
 			end,
 		}),

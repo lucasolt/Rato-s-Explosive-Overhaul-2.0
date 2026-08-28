@@ -35,15 +35,15 @@ function Grenade:GetTrajectory(attack_args, attack_pos, target_pos, mishap, boun
 
     -------Removed the sanity check. Why not? :)
     -- sanity-check the target pos
-    -- local pass = SnapToPassSlab(target_pos)
-    -- if pass then
-    --     pass = pass:IsValidZ() and pass or pass:SetTerrainZ()
-    --     if abs(pass:z() - target_pos:z()) >= 2 * const.SlabSizeZ then
-    --         valid_target = false
-    --     end
-    -- else
-    --     valid_target = false
-    -- end
+    --local pass = SnapToPassSlab(target_pos)
+    --if pass then
+    --    pass = pass:IsValidZ() and pass or pass:SetTerrainZ()
+    --    if abs(pass:z() - target_pos:z()) >= 2 * const.SlabSizeZ then
+    --        valid_target = false
+    --    end
+    --else
+    --    valid_target = false
+    --end
     -------
 
     local num_bounces = attack_args.num_bounces
