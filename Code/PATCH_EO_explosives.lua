@@ -84,6 +84,7 @@ function RatoEO_Patch()
 	ShapedCharge.Weigth = 1070
 	ShapedCharge.r_shape = "Stick_like"
 	ShapedCharge.CanBounce = false
+	ShapedCharge.coneAngle= 40
 	ShapedCharge.r_soft_surface = false
 	ShapedCharge.CanAppearInShop = false
 	ShapedCharge.AdditionalHint = T( 921753015061,[[<EO_description_hints>
