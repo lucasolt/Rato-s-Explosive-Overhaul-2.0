@@ -356,6 +356,85 @@ arredondam diferente) e trocar a associação de `sin*cos*radius + centro` por
 `(sin*radius)*cos + centro`. Nos dois casos a contagem de sobreviventes batia e só as
 coordenadas mudavam no último bit — exatamente o tipo de coisa que só aparece comparando.
 
+### C6 — o gerador v2: a banda passou a ser desenhada, não sobra de descarte
+
+O gerador da v1 não era ruim: a espiral de Fibonacci para o azimute é a forma canônica
+de espalhar pontos numa esfera, e o viés lateral que ele produzia era **bom** — 94,5%
+dos raios entre 0° e 40°, quase uniforme até ~36°, que é exatamente onde estão as
+unidades em pé. O problema era o caminho até lá:
+
+- gerava 700 vetores para traçar 388 (44,5% de trabalho jogado fora — o C1 barateou
+  isso, mas não eliminou);
+- a forma final era a união de dois pedaços reescalados por `phi*0.65` e `phi*2.5`, com
+  uma **descontinuidade de densidade em ~37,9°**, onde um ramo acaba e só o outro,
+  esparso, continua;
+- não havia como tunar nada sem mexer nos dois multiplicadores no escuro.
+
+A v2 amostra direto na banda útil. O azimute continua sendo o ângulo áureo (a parte que
+já estava certa); só a elevação passou a vir de uma curva explícita:
+
+```
+t     = (i - 0,5) / N
+lobo  = t < MainPct%  ->  elev = ElevMain * u^Shape
+cauda = senão         ->  elev = ElevMain .. ElevMax
+```
+
+Não há mais descarte: `numPositions` é o número de raios **traçados**. Quem chama aplica
+`EO.ShrapTracedPct` (55%) sobre o `r_shrap_num`, o que reproduz a contagem de `CheckLOF`
+de antes — 700 → 385, contra 388 da v1. O custo por explosão não sobe.
+
+Os botões vivem em `__EOParams.lua`, seguindo a convenção do `const.EO`:
+
+| botão | default | o que faz |
+|---|---|---|
+| `EO.ShrapElevMain` | 38 | teto da banda principal, em graus. **É o dial lateral.** |
+| `EO.ShrapElevShape` | 100 | expoente ×100 dentro da banda. 100 = uniforme; >100 empurra para o horizonte |
+| `EO.ShrapMainPct` | 95 | % dos raios na banda principal |
+| `EO.ShrapElevMax` | 82 | teto do respingo alto |
+| `EO.ShrapTracedPct` | 55 | % do `r_shrap_num` que vira raio traçado |
+
+**Os defaults reproduzem a distribuição de hoje** — a mudança é de mecanismo, não de
+balanço:
+
+```
+elevacao          v1 (descarte)         v2 (banda desenhada)
+   0- 5 deg    10.3%                 12.5%
+   5-10 deg    11.6%                 12.5%
+  10-15 deg    12.1%                 12.5%
+  15-20 deg    12.9%                 12.5%
+  20-25 deg    13.1%                 12.7%
+  25-30 deg    13.4%                 12.5%
+  30-40 deg    21.1%                 20.3%
+  40-60 deg     3.4%                  2.1%
+  60-90 deg     2.1%                  2.6%
+
+maior buraco no azimute:  v1 1.38 deg  ->  v2 1.12 deg   (ideal 0.94)
+```
+
+E o dial, que é o que você queria de verdade — quanto dos raios sai rasante:
+
+| ElevMain | Shape | 0-15° | 15-30° | 30°+ |
+|---|---|---|---|---|
+| 38 | 100 | 37,4% | 37,7% | 24,9% | ← default (= v1 hoje) |
+| 38 | 150 | 51,2% | 29,9% | 19,0% |
+| 38 | 200 | 59,7% | 24,7% | 15,6% |
+| 25 | 100 | 56,9% | 38,4% | 4,7% |
+| 25 | 200 | 73,5% | 21,8% | 4,7% |
+
+Custo acumulado da trigonometria por explosão de 700, somando C1 e C6:
+
+| | chamadas de trig |
+|---|---|
+| original (duas passadas) | 4201 |
+| C1 (fundido, mesmo resultado) | 2565 |
+| **C6 (banda desenhada)** | **1541 (−63% do original)** |
+
+`tools/shrapnel_dist_test.lua` roda o gerador real do repo, lê os `const.EO.Shrap*` do
+próprio `__EOParams.lua` e imprime tudo acima. Mexeu num botão, rode antes de entrar no
+jogo. (O `shrapnel_perf_test.lua`, que provava equivalência bit a bit do C1, saiu: o
+gerador que ele testava foi substituído pela v2, que difere de propósito. A prova segue
+no histórico do git.)
+
 ### Achado durante o C4/C5: o caminho do cone está morto
 
 Ao otimizar `generateShrapnelPositionsInCone` ficou claro que **ele nunca roda**. O

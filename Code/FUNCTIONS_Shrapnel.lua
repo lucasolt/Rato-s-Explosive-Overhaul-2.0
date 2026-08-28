@@ -141,6 +141,10 @@ function GetShrapnelResults(self, explosion_pos, attacker)
 
         shrapnels = generateShrapnelPositionsInCone(num_shrap, radius, explosion_pos, cone_args)
     else
+        ---- O gerador v2 nao descarta nada: num_shrap aqui e o numero de raios que serao
+        ---- TRACADOS. A v1 gerava N e sobrevivia 55,4% deles, entao aplicar o mesmo fator
+        ---- aqui mantem a contagem de CheckLOF (e o custo) igual a de antes.
+        num_shrap = MulDivRound(num_shrap, const.EO.ShrapTracedPct or 55, 100)
         ---- PERF (C1): os arrays de phi/theta so existem quando o debug visual esta ligado.
         shrapnels, phis, thetas = generateShrapnelPositions(num_shrap, radius, explosion_pos,
                                                             debug_shrap_vec)

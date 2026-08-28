@@ -43,27 +43,47 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 	return positions
 end
 
----- PERF (C1): gerador fundido, com o descarte ANTES do trabalho caro.
+---- ============================================================================
+---- Distribuicao dos estilhacos -- v2 (banda desenhada, sem descarte)
+---- ============================================================================
 ----
----- Antes eram duas passadas: generateShrapnelVectors montava N tabelas {x,y,z} mais dois
----- arrays de debug, e so entao generateShrapnelPositions jogava fora ~44,5% deles (todo
----- estilhaco que aponta para baixo, isto e, que ia para o chao). Ou seja: pagava-se
----- trigonometria completa, tres sorteios e varias alocacoes por vetor para descobrir
----- depois que quase metade nao seria nem tracada.
+---- O que a v1 fazia: distribuia uniforme na esfera inteira (espiral de Fibonacci,
+---- que e a forma canonica e continua aqui), reescalava phi por dois multiplicadores
+---- (phi >= 1.4 and phi*0.65 or phi*2.5) e depois jogava fora tudo que apontava para
+---- baixo. O vies lateral que sobrava era BOM -- 94,5% dos raios entre 0 e 40 graus,
+---- quase uniforme ate ~36 -- mas ele saia por descarte, nao por desenho:
 ----
----- Agora o teste de descarte roda logo depois do acos/cos, antes de sin(phi), das duas
----- funcoes de theta, dos sorteios e do point(). Um estilhaco que vai para o chao custa
----- duas chamadas de trigonometria e nada mais.
+----   * geravam-se 700 vetores para tracar 388 (44,5% de trabalho jogado fora);
+----   * a forma final era a uniao de dois pedacos reescalados, com uma
+----     descontinuidade de densidade em ~37,9 graus (onde um ramo acaba e so o
+----     outro, esparso, continua);
+----   * nao havia como tunar nada sem mexer nos dois multiplicadores no escuro.
 ----
----- O conjunto de sobreviventes e o MESMO: o corte usa a margem do offset aleatorio
----- (zr + maxOffset <= 0 => morto para qualquer sorteio possivel), entao nenhum vetor que
----- hoje sobrevive passa a ser descartado. So a ORDEM do fluxo de math.random muda, e ele
----- ja era nao-deterministico -- ver A2 no SHRAPNEL_REPORT.md, ainda pendente.
+---- A v2 amostra DIRETO na banda util: a elevacao de cada raio vem de uma curva
+---- explicita, e todo vetor gerado e tracado. O azimute continua sendo o angulo
+---- aureo (a parte que ja estava certa).
+----
+----   t     = (i - 0,5) / N                          posicao no sorteio, em [0,1)
+----   lobo  = t < MainPct%   -> elev = ElevMain * u^Shape      (banda principal)
+----   cauda = senao          -> elev = ElevMain .. ElevMax     (respingo alto)
+----
+---- Os defaults em __EOParams.lua reproduzem a distribuicao de hoje. Os botoes:
+----
+----   EO.ShrapElevMain   teto da banda principal, em graus. E O DIAL LATERAL:
+----                      menor = mais rasante, mais chance de pegar quem esta em pe
+----                      longe; maior = mais spray para cima, perdido.
+----   EO.ShrapElevShape  expoente x100 dentro da banda. 100 = uniforme (hoje).
+----                      >100 empurra os raios para perto do horizonte.
+----   EO.ShrapMainPct    % dos raios na banda principal; o resto vira respingo alto.
+----   EO.ShrapElevMax    teto do respingo.
+----
+---- NAO ha mais descarte: numPositions e o numero de raios TRACADOS. Quem chama
+---- aplica EO.ShrapTracedPct sobre o r_shrap_num para manter a mesma contagem de
+---- CheckLOF de antes -- o custo por explosao nao muda.
 function generateShrapnelPositions(numPositions, radius, center, want_debug)
 	local positions = {}
 	local phis_list = want_debug and {} or nil
 	local theta_list = want_debug and {} or nil
-	local n = 0
 
 	if numPositions < 1 then
 		return positions, phis_list, theta_list
@@ -73,42 +93,43 @@ function generateShrapnelPositions(numPositions, radius, center, want_debug)
 	---- do projeto e MulDivRound em vez de float (ver CLAUDE.md).
 	local maxRandomOffset = MulDivRound(const.SlabSizeX, 15, 100)
 
+	local EO = const.EO or empty_table
+	local elev_main = EO.ShrapElevMain or 38
+	local elev_max = EO.ShrapElevMax or 82
+	---- ATENCAO: '*0.01' e nao '/100'. Nesta engine o '/' entre inteiros e divisao
+	---- inteira truncada, entao main_pct/100 daria 0 e o expoente 150/100 daria 1.
+	local main_frac = (EO.ShrapMainPct or 95) * 0.01
+	local shape_exp = (EO.ShrapElevShape or 100) * 0.01
+
 	local goldenRatio = (1 + sqrt(5)) / 2
 	local two_pi = 2 * pi
+	local deg2rad = pi / 180
+	local tail_span = elev_max - elev_main
 	local cx, cy, cz = center:x(), center:y(), center:z()
 
 	for i = 1, numPositions do
-		---- phi e theta sao calculados com a MESMA sequencia de operacoes de antes.
-		---- Hastear as divisoes (2*pi/golden fora do laco) parece inofensivo e nao e:
-		---- (2*pi*(i-1))/g e (2*pi/g)*(i-1) arredondam diferente, e o teste de
-		---- equivalencia acusa. O ganho seria uma divisao por estilhaco, irrelevante
-		---- perto da trigonometria que o C1 ja cortou.
-		local phi = acos(-1 + 2 * (i - 0.5) / numPositions)
-		phi = phi >= 1.4 and phi * 0.65 or phi * 2.5
+		local t = (i - 0.5) / numPositions
 
-		local zr = cos(phi) * radius
+		local elev
+		if t < main_frac then
+			local u = t / main_frac
+			elev = elev_main * (shape_exp == 1 and u or u ^ shape_exp)
+		else
+			elev = elev_main + tail_span * (t - main_frac) / (1 - main_frac)
+		end
 
-		---- vai para baixo mesmo com o offset mais favoravel: nem sorteia, nem aloca.
-		if zr + maxRandomOffset > 0 then
-			local xOffset = random(-maxRandomOffset, maxRandomOffset)
-			local yOffset = random(-maxRandomOffset, maxRandomOffset)
-			local zOffset = random(-maxRandomOffset, maxRandomOffset)
+		local elev_rad = elev * deg2rad
+		local horiz = cos(elev_rad) * radius
+		local zr = sin(elev_rad) * radius
 
-			if zr + zOffset > 0 then
-				local theta = two_pi * (i - 1) / goldenRatio
-				local sin_phi = sin(phi)
+		local theta = two_pi * (i - 1) / goldenRatio
 
-				---- a ordem das multiplicacoes e a MESMA da versao de duas passadas
-				---- (sin*cos*radius + centro, nao (sin*radius)*cos): associacao diferente
-				---- muda o ultimo bit do float e o teste de equivalencia pega isso.
-				n = n + 1
-				positions[n] = point(sin_phi * cos(theta) * radius + cx + xOffset,
-				                     sin_phi * sin(theta) * radius + cy + yOffset, cz + zr + zOffset)
-				if want_debug then
-					phis_list[n] = phi
-					theta_list[n] = theta
-				end
-			end
+		positions[i] = point(horiz * cos(theta) + cx + random(-maxRandomOffset, maxRandomOffset),
+		                     horiz * sin(theta) + cy + random(-maxRandomOffset, maxRandomOffset),
+		                     cz + zr + random(-maxRandomOffset, maxRandomOffset))
+		if want_debug then
+			phis_list[i] = elev
+			theta_list[i] = theta
 		end
 	end
 
