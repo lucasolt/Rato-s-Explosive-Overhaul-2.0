@@ -127,7 +127,10 @@ function GetShrapnelResults(self, explosion_pos, attacker)
         -- DbgAddCircle(direction,1000, const.clrRed)
         direction = IsValidZ(direction) and direction or direction:SetTerrainZ()
         local direction_angle = CalcOrientation(explosion_pos, direction)
-        num_shrap = self.coneAngle * num_shrap / 230 -- 360
+        ---- PERF (C5): era "coneAngle * num_shrap / 230", que depende do '/' da engine para
+        ---- nao virar float e alimentar um "for i = 1, numPositions" com limite float.
+        ---- MulDivRound e a forma que o CLAUDE.md manda usar e devolve inteiro sempre.
+        num_shrap = MulDivRound(num_shrap, self.coneAngle, 230) -- 360
         -- print("cone num sjh", num_shrap)
         local cone_args = {
             angle_deg = self.coneAngle,
@@ -138,7 +141,9 @@ function GetShrapnelResults(self, explosion_pos, attacker)
 
         shrapnels = generateShrapnelPositionsInCone(num_shrap, radius, explosion_pos, cone_args)
     else
-        shrapnels, phis, thetas = generateShrapnelPositions(num_shrap, radius, explosion_pos)
+        ---- PERF (C1): os arrays de phi/theta so existem quando o debug visual esta ligado.
+        shrapnels, phis, thetas = generateShrapnelPositions(num_shrap, radius, explosion_pos,
+                                                            debug_shrap_vec)
     end
 
     if debug_shrap_vec then
@@ -200,23 +205,25 @@ function GetShrapnelResults(self, explosion_pos, attacker)
     local dmg_log = {}
 
     local gren_random = 30
+    ---- PERF (C3): cRound(gren_random / 2) e constante; rodava uma vez por estilhaco.
+    local random_f_base = 100 - cRound(gren_random / 2)
 
-    local function reverseTable(tbl)
-        local reversed = {}
-        for i = #tbl, 1, -1 do
-            table.insert(reversed, tbl[i])
-        end
-        return reversed
-    end
+    ---- PERF (C3): base_radius e a faixa secundaria sao constantes da explosao inteira;
+    ---- estavam sendo recalculadas dentro do laco, uma vez por estilhaco que acerta.
+    local base_radius = self.AreaOfEffect * const.SlabSizeX
+    local secondary_radius = cRound(base_radius * radius_mul)
 
-    shrapnels = reverseTable(shrapnels)
+    ---- PERF (C2): a ordem invertida importa (quem chega primeiro conta cheio no teto de
+    ---- shrap_received), mas a copia nao: reverseTable alocava um array inteiro so para
+    ---- poder percorrer de tras para frente. O laco decrescente faz o mesmo de graca.
     local results = {}
-    for i, vector in ipairs(shrapnels) do
+    for i = #shrapnels, 1, -1 do
+        local vector = shrapnels[i]
         final_pos = vector
         lof_args.target_pos = final_pos
         lof_args.attack_pos = explosion_pos + SetLen(final_pos - explosion_pos, guic * 12)
 
-        local random_f = 100 - cRound(gren_random / 2) + attacker:Random(gren_random)
+        local random_f = random_f_base + attacker:Random(gren_random)
 
         local attack_data = CheckLOF(final_pos, lof_args)
 
@@ -263,10 +270,9 @@ function GetShrapnelResults(self, explosion_pos, attacker)
         end
 
         if attack_data and not max_shrap_received then
-            lof = attack_data.lof and attack_data.lof[1]
-            hit = lof and lof.hits and lof.hits[1]
-            hit_pos = hit and hit.pos
-
+            ---- PERF (C3): lof/hit/hit_pos ja foram lidos no bloco acima, que so roda
+            ---- quando attack_data existe -- e nada os invalida no meio. A releitura era
+            ---- pura repeticao.
             local exclude_civ
             if hit and not hit.terrain and not max_shrap_received then
 
@@ -277,13 +283,10 @@ function GetShrapnelResults(self, explosion_pos, attacker)
                     attack_pos = lof_args.attack_pos
                 }
 
-                local base_radius = self.AreaOfEffect * const.SlabSizeX
-
                 local dist_ = hit_data.target_pos:Dist(hit_data.attack_pos)
 
-                local dist_t = dist_ <= base_radius and 100 or dist_ <=
-                                   cRound(base_radius * radius_mul) and secondary_radius_f or
-                                   outer_radius_t
+                local dist_t = dist_ <= base_radius and 100 or dist_ <= secondary_radius and
+                                   secondary_radius_f or outer_radius_t
 
                 if IsKindOf(hit.obj, "Unit") and hit.obj:IsCivilian() and dist_t < outer_radius_t then
                     exclude_civ = true

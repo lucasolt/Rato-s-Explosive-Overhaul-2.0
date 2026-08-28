@@ -271,8 +271,116 @@ Nada disso precisa mexer em `r_shrap_num` de item nenhum.
 
 ## 7. Ordem sugerida
 
+> Nada desta seção foi aplicado ainda; a seção 8 cobre uma leva separada, só de performance.
+
 1. `math.random` → `InteractionRand` nos dois geradores (**A2**) — risco de desync em co-op.
 2. O `1.12` do cone (**A3**) — comportamento dependente da altitude do mapa.
 3. Escrever a tier "Very Low" explicitamente em `frag_args` (**A5**).
 4. Tuning das zonas (**T1**) e do `step_mul` de Medium (**T2**), validando na bancada.
 5. Decidir o que a opção `shrap_num` deve ser (**A1**): performance ou balanço.
+
+---
+
+## 8. Performance — o que foi aplicado
+
+Marcadores `PERF (C1)` a `PERF (C5)`. **Nenhuma dessas mudanças altera balanço**: o
+conjunto de estilhaços gerados é bit a bit o mesmo, e há teste provando isso.
+
+### C1 — o descarte agora vem antes do trabalho caro (o principal)
+
+Era o pedido original: não gastar processamento com o estilhaço que vai para o chão.
+O pipeline antigo tinha duas passadas — `generateShrapnelVectors` montava N tabelas
+`{x,y,z}` mais dois arrays de debug, e só então `generateShrapnelPositions` jogava fora
+os ~44,5% que apontam para baixo. Ou seja: pagava-se trigonometria completa, três
+sorteios e várias alocações **por vetor** para descobrir depois que quase metade nem
+seria traçada.
+
+Os dois geradores viraram um laço só, com o teste de descarte logo depois do `acos`/`cos`
+— antes de `sin(phi)`, das duas funções de `theta`, dos sorteios e do `point()`. Um
+estilhaço que vai para o chão passou a custar duas chamadas de trigonometria e nada mais.
+
+O corte é conservador de propósito: usa a margem do offset aleatório
+(`zr + maxOffset <= 0` ⇒ morto para qualquer sorteio possível), então **nenhum vetor que
+sobrevivia antes passa a ser descartado**.
+
+| HE_Grenade, 700 estilhaços | antes | agora |
+|---|---|---|
+| chamadas de trigonometria | 4201 | 2565 (**−38%**) |
+| tabelas `{x,y,z}` alocadas | 700 | 0 |
+| arrays intermediários | 3 (vectors/phis/thetas) | 0 (phi/theta só com debug ligado) |
+| chamadas de `math.random` | 2100 | ~1170 |
+| posições sobreviventes | 388 | 388 (idênticas) |
+
+### C2 — `reverseTable`
+
+Alocava um array inteiro só para poder percorrer de trás para frente. A ordem importa
+(quem chega primeiro conta cheio no teto de `shrap_received`), a cópia não: um laço
+decrescente faz o mesmo de graça.
+
+### C3 — invariantes dentro do laço quente
+
+`base_radius` e o raio da faixa secundária são constantes da explosão e estavam sendo
+recalculados a cada estilhaço que acerta; `cRound(gren_random / 2)` idem. E o segundo
+bloco relia `lof`/`hit`/`hit_pos`, que o bloco acima já tinha calculado no mesmo giro.
+
+### C4 — invariantes do cone
+
+`tan(angle/2)`, `radius²` e `2π` saíram do laço; `point(1,0,0)` e `point(0,0,1)`
+deixaram de ser reconstruídos a cada iteração.
+
+### C5 — `coneAngle * num_shrap / 230` → `MulDivRound`
+
+Dependia do `/` da engine para não virar float e alimentar um `for i = 1, numPositions`
+com limite float. `MulDivRound` é a forma que o `CLAUDE.md` manda usar e devolve inteiro
+sempre. Muda a contagem em ±1 estilhaço (arredonda em vez de truncar).
+
+### Verificação
+
+`tools/shrapnel_perf_test.lua` roda o gerador **real** do repo contra uma reimplementação
+da versão antiga e compara as saídas posição a posição. Como o gerador novo sorteia menos
+vezes, os dois fluxos de `math.random` divergem por construção — então o teste fixa
+`math.random` num valor constante, e aí a contagem de chamadas deixa de importar e as
+saídas têm que bater exatamente. Roda no offset central e nos dois extremos, que é onde o
+corte conservador do C1 poderia errar:
+
+```
+$ lua5.3 tools/shrapnel_perf_test.lua
+offset     +0 | antigo 388 pos, 4201 trig | novo 388 pos, 2565 trig | IDENTICO
+offset   +150 | antigo 393 pos, 4201 trig | novo 393 pos, 2580 trig | IDENTICO
+offset   -150 | antigo 383 pos, 4201 trig | novo 383 pos, 2550 trig | IDENTICO
+```
+
+Durante o desenvolvimento este teste pegou duas regressões reais que passariam batido em
+revisão: hastear `2*pi/goldenRatio` para fora do laço (`(2π*(i-1))/g` e `(2π/g)*(i-1)`
+arredondam diferente) e trocar a associação de `sin*cos*radius + centro` por
+`(sin*radius)*cos + centro`. Nos dois casos a contagem de sobreviventes batia e só as
+coordenadas mudavam no último bit — exatamente o tipo de coisa que só aparece comparando.
+
+### O que NÃO foi feito, e por quê
+
+**Rejeitar por raycast o estilhaço que entra no chão** — a leitura literal do pedido — não
+dá para fazer sem mudar comportamento, e vale registrar o porquê:
+
+- O filtro que já existe (`z > center:z()`) mede o **ponto final** a 13 tiles. Numa
+  explosão em terreno plano, todo raio sobrevivente sobe: nenhum "vai para o chão".
+- Em rampa ou encostado numa parede, boa parte do hemisfério de cima aponta para dentro do
+  terreno. Dava para detectar isso barato com `terrain.GetHeight` no ponto final — mas
+  **uma unidade pode estar no caminho, antes da colisão com o chão**. Rejeitar o raio
+  perderia esse acerto.
+- Encurtar o raio até o ponto de entrada no terreno não ajuda: é exatamente o que o
+  `CheckLOF` já faz (`penetration_class = -1`, para no primeiro obstáculo).
+- Pular o `CheckLOF` de raios que geometricamente não alcançam unidade nenhuma também não
+  fecha: a mesma chamada é quem corta o traçador visual na parede. Sem ela o efeito
+  atravessaria paredes.
+
+O ganho real dessa ideia é o C1 — é o mesmo raciocínio ("não pague pelo estilhaço que vai
+para baixo"), só movido para onde ele é seguro: antes da geração, não depois do raycast.
+
+Para quem quiser menos raycast de fato, a alavanca já existe e está documentada em **A1**:
+a opção `shrap_num` a 25% traça um quarto dos raios sem perder dano nenhum.
+
+### Ainda pendente
+
+Esta leva foi só performance. Continuam abertos, do item 7: **A2** (`math.random` →
+`InteractionRand`, risco de desync em co-op — o C1 reduz o número de chamadas mas não
+troca a fonte), **A3** (o `1.12` que escala o Z absoluto do mapa) e **A5**.
