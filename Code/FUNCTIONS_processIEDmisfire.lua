@@ -29,7 +29,7 @@ function processIEDmisfire(weapon, unit)
             ObjModified(weapon)
         end
 
-		if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
+		if GameState.RainHeavy and IsKindOf(weapon, "GrenadeProperties") then
     	    chance = MulDivRound(chance, const.EO.HeavyRainIEDMisfireMul, 100)
     	end
 

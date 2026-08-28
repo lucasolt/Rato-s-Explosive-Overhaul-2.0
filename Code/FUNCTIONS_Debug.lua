@@ -46,7 +46,7 @@ function DbgAddCircle_rat(attack_args, a, b, color)
 end
 
 function DbgAddCircle_collide_test(pos, r, c)
-    -- local enabled = true
+    local enabled = false
     if enabled then
         DbgAddCircle(pos, r, c)
     end
