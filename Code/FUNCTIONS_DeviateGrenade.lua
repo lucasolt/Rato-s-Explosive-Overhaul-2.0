@@ -88,7 +88,7 @@ local underslungGLpenalty = -10 --- higher = more accurate
 
 const.EO_DeviationMinBASE = 1350 ---- erro minimo no stat 0, em milesimos de tile
 const.EO_DeviationMinSCALE = 750 ---- r_min chega a zero por volta de ui 51
-const.EO_DeviationMaxBASE = 6900 ---- erro maximo no stat 0
+const.EO_DeviationMaxBASE = 7500--6900 ---- erro maximo no stat 0
 const.EO_DeviationMaxSCALE = 6000 ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
 
 ---- (const.EO_DeviationMaxSCALE - const.EO_DeviationMinSCALE) e a taxa com que a faixa ESTREITA conforme a skill sobe:

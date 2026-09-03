@@ -15,7 +15,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 2,
 	'version_minor', 22,
-	'version', 3869,
+	'version', 3870,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'entities', {
@@ -112,8 +112,8 @@ return PlaceObj('ModDef', {
 		shrap_num = "100",
 	},
 	'has_data', true,
-	'saved', 1787881328,
-	'code_hash', 5522361831149614283,
+	'saved', 1788407869,
+	'code_hash', -6672905547833056679,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "CharacterEffectCompositeDef",
