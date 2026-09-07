@@ -42,109 +42,14 @@ function validate_deviated_gren_pos(explosion_pos, attack_args)
     return newGroundPos
 end
 
-----------Args
-local GR_dist_pen = 10 -- 20 -- 25 ---- Higher = less accurate
-local RPG_dist_pen = 6 -- 12 ---- Higher = less accurate
-local GL_dist_pen = 6 -- 12 ---- Higher = less accurate
-
----- status effects/ other penalties
-local wound_penalty_per_stack = 5 ---- Higher = less accurate
-local innacurate_penalty = 15 ---- Higher = less accurate
-local blind_dazed_penalty = 20 ---- Higher = less accurate
-local rainHeavyPenalty = 10 ---- Higher = less accurate
-
------- Get item accuracy modidifers
-local underslungGLpenalty = -10 --- higher = more accurate
-
-------- Deviation Params ---- MOTOR ABSOLUTO
---
--- O raio do erro e desenhado direto em tiles, sem clamp:
---
---     miss = (roll - gate) / (100 - gate)                 gate = stat * sfp / 100
---     r    = r_min(stat) + (r_max(stat) - r_min(stat)) * miss^dev_shape
---     dir  = 90deg * sinal(u) * |u|^dir_bias  (u uniforme em [-1,1]) + flip de 180deg
---
--- |erro| = r sempre. O r_min e um piso de imprecisao de verdade, e o vies mora na
--- DIRECAO, nao na magnitude. Nao existe max()/min() no caminho, entao a distribuicao
--- nao tem atomo (a versao com piso por clamp empilhava metade da massa num raio so).
---
--- A distancia NAO multiplica mais o erro. Ela entra por um canal so: GR_dist_pen,
--- que desconta do stat. Por isso o clamp de unidades tiles-vs-mundo deixou de existir
--- junto com o bloco geometrico antigo.
---
--- Tudo em milesimos de tile e percentuais inteiros: Lua 5.3 com '/' inteiro, e float
--- em caminho sincronizado vaza para o NetUpdateHash (ver CLAUDE.md).
-
----- Ajustados por fit ancorado em 15 TILES, contra o alvo do autor:
-----   Great tipico 1 t | Good 2 t | Inaccurate 3.5 t | Terrible 5 t
----- Depois escalados 1.20x a pedido ("uns 20% mais desviado").
----- A 15t: stat 90 -> 1.38/2.54 | 75 -> 1.98/3.48 | 60 -> 2.83/4.52 | 45 -> 3.71/5.58
----- r_max(100) fica em 0.61 t de proposito: se ele chegasse a zero, um merc de ui alto
----- em curta distancia teria r_max = r_min = 0 e TODO arremesso viraria Perfect.
--- const.EO_DeviationMinBASE =  1171 ---- erro minimo no stat 0, em milesimos de tile
--- const.EO_DeviationMinSCALE = 2292 ---- r_min chega a zero por volta de ui 51
--- const.EO_DeviationMaxBASE = 8742 ---- erro maximo no stat 0
--- const.EO_DeviationMaxSCALE = 8011 ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
-
-const.EO_DeviationMinBASE = 1350 ---- erro minimo no stat 0, em milesimos de tile
-const.EO_DeviationMinSCALE = 750 ---- r_min chega a zero por volta de ui 51
-const.EO_DeviationMaxBASE = 7500--6900 ---- erro maximo no stat 0
-const.EO_DeviationMaxSCALE = 6000 ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
-
----- (const.EO_DeviationMaxSCALE - const.EO_DeviationMinSCALE) e a taxa com que a faixa ESTREITA conforme a skill sobe:
----- positivo = skill compra consistencia; zero = skill desloca a faixa inteira (precisao pura)
-
----- CANAL 2 da distancia: ela mexe na LARGURA da faixa, sem tocar no piso.
-----   spread(L) = PERTO + (LONGE - PERTO) * L / alcance_maximo     (em %)
-----   r_max_efetivo = r_min + (r_max - r_min) * spread / 100
-----
----- Duas pontas, para dar as duas direcoes:
-----   PERTO 100, LONGE 100 -> canal desligado
-----   PERTO 100, LONGE 160 -> perto igual, LONGE 60% mais largo   (piora com o alcance)
-----   PERTO  60, LONGE 100 -> longe igual, PERTO 40% mais estreito (aperta de perto)
-----   PERTO  80, LONGE 140 -> as duas coisas ao mesmo tempo
-----
----- O piso nunca se mexe, entao apertar de perto nao devolve o arremesso cirurgico.
----- O GR_dist_pen continua existindo e continua sendo quem move a tooltip.
-const.EO_DeviationSpreadNEAR = 80
-const.EO_DeviationSpreadFAR = 160
-
-local dev_shape = 1 ---- expoente INTEIRO. 1 = linear. >1 concentra perto do piso (precisao comum),
----- a curva espelhada 1-(1-miss)^k faz o oposto (precisao rara) -- ver dev_shape_mirror abaixo
-local dev_shape_mirror = false ---- true troca miss^k por 1-(1-miss)^k
-
-local dir_bias = 2 ---- expoente INTEIRO. 1 = isotropico. >1 concentra no eixo do arremesso
-local short_mul = 100 ---- % do lado que volta pro arremessador. 100 = simetrico, <100 encurta
-local launcher_r_pct = 90 ---- % do raio para GL/RPG (no motor antigo eles desviavam ~12% menos)
-
-local stat_factor_perfect_throw = 26 ---- gate = stat * isto / 100; roll abaixo dele = acerto exato
-
----- rotulos por distancia absoluta, em milesimos de tile.
----- O texto significa a MESMA coisa para qualquer merc e qualquer granada: a skill muda
----- com que frequencia cada um sai, nao o que ele quer dizer.
----- ATENCAO: sao derivados da distribuicao. Mexeu em r_min/r_max/dev_shape, recalibre
----- (a bancada tem o botao "Calibrar rotulos").
----- FONTE UNICA das bandas de rotulo.
----- Leem daqui, e so daqui: o texto flutuante no jogo, o print de debug e os aneis
----- desenhados no mapa. Mexeu num raio aqui, mexeu nos tres ao mesmo tempo.
-----   max  = raio maximo da banda, em milesimos de tile (a ultima nao tem: pega o resto)
-----   ring = cor do anel no mapa (false = nao desenha)
-----   warn = pinta o texto flutuante com AmmoAPColor
-local LABEL_BANDS = {
-    {name = "Perfect", max = 0, ring = false}, {name = "Great", max = 1200, ring = "clrGreen"},
-    {name = "Normal", max = 2100, ring = "clrYellow", silent = true},
-    {name = "Innacurate", max = 3200, ring = "clrRed", warn = true},
-    {name = "Terrible", ring = false, warn = true}
-}
-
 ---- em qual banda cai um erro (em milesimos de tile)
 local function band_of(err)
-    for _, b in ipairs(LABEL_BANDS) do
+    for _, b in ipairs(const.EO.DeviationLabelBands) do
         if not b.max or err <= b.max then
             return b
         end
     end
-    return LABEL_BANDS[#LABEL_BANDS]
+    return const.EO.DeviationLabelBands[#const.EO.DeviationLabelBands]
 end
 
 ---- T() so na primeira chamada: nao depende de T estar pronto na hora do load
@@ -211,24 +116,24 @@ end
 ---- raio do erro em milesimos de tile, a partir do roll e do stat da UI.
 ---- dist_pct = distancia do arremesso como % do alcance maximo (0..100)
 local function deviation_radius(stat, roll, is_grenade, dist_pct)
-    local gate = MulDivRound(stat, stat_factor_perfect_throw, 100)
+    local gate = MulDivRound(stat, const.EO.DeviationStatFactorForPerfectThrow, 100)
     if roll <= gate then
         return 0, gate
     end
     ---- miss em milesimos: onde este roll cai entre o gate e o pior roll possivel
     local miss = MulDivRound(roll - gate, 1000, 100 - gate)
-    local curve = pow_milli(miss, dev_shape)
-    if dev_shape_mirror then
-        curve = 1000 - pow_milli(1000 - miss, dev_shape)
+    local curve = pow_milli(miss, const.EO.DeviationShape)
+    if const.EO.DeviationShapeMirror then
+        curve = 1000 - pow_milli(1000 - miss, const.EO.DeviationShape)
     end
 
-    local r_min = Max(0, const.EO_DeviationMinBASE -
-                          MulDivRound(const.EO_DeviationMinSCALE, stat, 100))
-    local r_max = Max(r_min, const.EO_DeviationMaxBASE -
-                          MulDivRound(const.EO_DeviationMaxSCALE, stat, 100))
+    local r_min = Max(0, const.EO.DeviationMinBASE -
+                          MulDivRound(const.EO.DeviationMinSCALE, stat, 100))
+    local r_max = Max(r_min, const.EO.DeviationMaxBASE -
+                          MulDivRound(const.EO.DeviationMaxSCALE, stat, 100))
     ---- canal 2: a distancia mexe na largura. O piso nao se mexe.
-    local perto = const.EO_DeviationSpreadNEAR or 100
-    local longe = const.EO_DeviationSpreadFAR or 100
+    local perto = const.EO.DeviationSpreadNEAR or 100
+    local longe = const.EO.DeviationSpreadFAR or 100
     if perto ~= 100 or longe ~= 100 then
         local spread = perto + MulDivRound(longe - perto, Min(100, dist_pct or 100), 100)
         r_max = r_min + MulDivRound(r_max - r_min, Max(0, spread), 100)
@@ -236,8 +141,8 @@ local function deviation_radius(stat, roll, is_grenade, dist_pct)
 
     local r = r_min + MulDivRound(r_max - r_min, curve, 1000)
 
-    if not is_grenade and launcher_r_pct ~= 100 then
-        r = MulDivRound(r, launcher_r_pct, 100)
+    if not is_grenade and const.EO.DeviationLauncherRadiusMul ~= 100 then
+        r = MulDivRound(r, const.EO.DeviationLauncherRadiusMul, 100)
     end
     return r, gate
 end
@@ -295,7 +200,7 @@ function EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct)
     end
 
     ---- limiares dos rotulos: fixos em tiles, iguais para todo merc e toda granada
-    for _, b in ipairs(EO_DeviationLabels and LABEL_BANDS or empty_table) do
+    for _, b in ipairs(EO_DeviationLabels and const.EO.DeviationLabelBands or empty_table) do
         if b.ring and b.max and b.max > 0 then
             DbgAddCircle_devi(target_pos, MulDivRound(b.max, const.SlabSizeX, 1000), const[b.ring])
         end
@@ -332,7 +237,7 @@ function EO_PrintDeviation(info)
                         fmt_tiles(info.err), band_of(info.err).name))
     print("   percentis (aneis azuis, p50 ciano):  " .. table.concat(pct, "   "))
     local faixas = {}
-    for _, b in ipairs(LABEL_BANDS) do
+    for _, b in ipairs(const.EO.DeviationLabelBands) do
         if b.max and b.max > 0 then
             faixas[#faixas + 1] = string.format("%s <=%s", b.name, fmt_tiles(b.max))
         elseif not b.max then
@@ -398,12 +303,12 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
         return false
     end
 
-    ---- direcao: theta = 90deg * sinal(u) * |u|^dir_bias, u uniforme em [-1000, 1000].
-    ---- dir_bias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
+    ---- direcao: theta = 90deg * sinal(u) * |u|^const.EO.DeviationDirBias, u uniforme em [-1000, 1000].
+    ---- const.EO.DeviationDirBias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
     ---- em vez de espalhar para os lados.
     local u = InteractionRand(2001, "RATONADE_DeviationDir", unit) - 1000
     local sign = u < 0 and -1 or 1
-    local shaped = pow_milli(abs(u), dir_bias)
+    local shaped = pow_milli(abs(u), const.EO.DeviationDirBias)
     local angle = sign * MulDivRound(90 * 60, shaped, 1000)
     if InteractionRand(2, "RATONADE_DeviationFlip", unit) == 1 then
         angle = angle + 180 * 60
@@ -412,13 +317,13 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     local radius_world = MulDivRound(radius, const.SlabSizeX, 1000)
     local offset = Rotate(SetLen(dir, radius_world), angle)
 
-    ---- short_mul < 100 encurta so a metade que volta na direcao do arremessador
-    if short_mul ~= 100 then
+    ---- const.EO.DeviationShortMul < 100 encurta so a metade que volta na direcao do arremessador
+    if const.EO.DeviationShortMul ~= 100 then
         local fwd = SetLen(dir, 4096)
         local along = MulDivRound(offset:x(), fwd:x(), 4096) +
                           MulDivRound(offset:y(), fwd:y(), 4096)
         if along < 0 then
-            local cut = MulDivRound(along, 100 - short_mul, 100)
+            local cut = MulDivRound(along, 100 - const.EO.DeviationShortMul, 100)
             offset = offset -
                          point(MulDivRound(fwd:x(), cut, 4096), MulDivRound(fwd:y(), cut, 4096), 0)
         end
@@ -467,7 +372,7 @@ function EO_GetWoundPenalty_Deviation(unit)
     local max_wounds = GameRuleDefs.HeavyWounds:ResolveValue("MaxWoundsEffect")
 
     local stacks = Min(max_wounds, wounds.stacks)
-    return stacks * wound_penalty_per_stack
+    return stacks * const.EO.DeviationWoundPenaltyStack
 end
 
 if EO_DeviationDebugRoll == nil then
@@ -478,12 +383,12 @@ function GetDeviationModifier(item, unit, target, stat, diff_dist, opt_diff)
     local item_acc = item:get_throw_accuracy(unit)
     local wound_penalty = EO_GetWoundPenalty_Deviation(unit)
     local modifiers = -item_acc + opt_diff + diff_dist + wound_penalty
-    modifiers = unit:HasStatusEffect("Inaccurate") and modifiers + innacurate_penalty or modifiers
+    modifiers = unit:HasStatusEffect("Inaccurate") and modifiers + const.EO.DeviationInnacuratePenalty or modifiers
     modifiers = (unit:HasStatusEffect("Blinded") or unit:HasStatusEffect("dazed_flashbang")) and
-                    modifiers + blind_dazed_penalty or modifiers
+                    modifiers + const.EO.DeviationBlindDazedPenalty or modifiers
 
     --if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
-    --    modifiers = modifiers and modifiers + rainHeavyPenalty or 10
+    --    modifiers = modifiers and modifiers + const.EO.DeviationHeavyRainPenalty or 10
     --end
     ---- [1] e o que a UI mostra e o que o motor usa. Os demais existem so para o
     ---- print de debug conseguir mostrar de onde o numero veio.
@@ -519,7 +424,7 @@ function Grenade:GetMishapChance(unit, target, async)
     max_range = max_range * const.SlabSizeX
     local dist = attack_pos:Dist(target_pos)
     local ratio_dist = dist * 1.00 / max_range * 1.00
-    local diff_dist = cRound(ratio_dist * GR_dist_pen)
+    local diff_dist = cRound(ratio_dist * const.EO.DeviationGrenadeDistPen)
 
     local opt_diff = extractNumberWithSignFromString(CurrentModOptions.grenade_throw_diff) or 0
 
@@ -573,7 +478,7 @@ function GrenadeLauncher:GetMishapChance(unit, target, async)
     max_range = max_range * const.SlabSizeX
     local dist = attack_pos:Dist(target_pos)
     local ratio_dist = dist * 1.00 / max_range * 1.00
-    local diff_dist = cRound(ratio_dist * GL_dist_pen)
+    local diff_dist = cRound(ratio_dist * const.EO.DeviationGLDistPen)
 
     local opt_diff = extractNumberWithSignFromString(CurrentModOptions.GL_throw_diff) or 0
 
@@ -583,7 +488,7 @@ end
 function GrenadeLauncher:get_throw_accuracy(unit)
     if unit then
         local active_wep = unit:GetActiveWeapons()
-        return self == active_wep and 0 or underslungGLpenalty
+        return self == active_wep and 0 or const.EO.DeviationUnderSlungGLBonus
     end
     return 0
 end
@@ -612,7 +517,7 @@ function RocketLauncher:GetMishapChance(unit, target, async)
     max_range = max_range * const.SlabSizeX
     local dist = attack_pos:Dist(target_pos)
     local ratio_dist = dist * 1.00 / max_range * 1.00
-    local diff_dist = cRound(ratio_dist * RPG_dist_pen)
+    local diff_dist = cRound(ratio_dist * const.EO.DeviationRPGDistPen)
 
     local opt_diff = extractNumberWithSignFromString(CurrentModOptions.RPG_throw_diff) or 0
 

@@ -81,7 +81,7 @@ stat. O jogador recebe feedback na minoria das vezes.
 aparecem com frequência real, e ambos no meio-baixo da escala.
 
 **c) A distância pune duas vezes.** O erro já é proporcional ao vetor de arremesso, e
-`GR_dist_pen = 18` ainda derruba o stat conforme a razão dist/alcance. O composto é
+`const.EO.DeviationGrenadeDistPen = 18` ainda derruba o stat conforme a razão dist/alcance. O composto é
 superlinear: para o merc de stat 80, ir de 3t para 15t é 5× mais distância e **7,2×
 mais erro**.
 
@@ -190,7 +190,7 @@ desync em co-op.
 | `magnitude_effect` | 100 | escala do numerador | desloca a curva inteira |
 | `num_dice` | 2 | variância do roll | 1 = sorte pesa; 3+ = quase determinístico |
 | `base_skill_modifier` | 6 | soma direta no stat | +10 stat ≈ −13% de erro perto de stat 70 |
-| `GR_dist_pen` | 18 | penalidade de stat por distância | é a segunda mordida da distância |
+| `const.EO.DeviationGrenadeDistPen` | 18 | penalidade de stat por distância | é a segunda mordida da distância |
 | `stat_factor_perfect_throw` | 20 | portão de Perfect | ver tabela abaixo |
 
 Portão de Perfect com 2 dados:
@@ -209,7 +209,7 @@ Ambas assumem os dois bugs corrigidos. Erros em tiles, p50 / p90.
 
 **Proposta A — "erro menor, curva igual"**
 `grenade_length_factor 0.10 → 0.075`, `base_gr_rotation_factor 20 → 15`,
-`GR_dist_pen 18 → 8`, `stat_factor_perfect_throw 20 → 30`,
+`const.EO.DeviationGrenadeDistPen 18 → 8`, `stat_factor_perfect_throw 20 → 30`,
 limiares `great 0.75 → 0.70`, `inacc 2.00 → 1.50`, `terrible 3.20 → 2.50`.
 
 **Proposta B — A, mas com `potent 2 → 3`**
@@ -231,7 +231,7 @@ máximo erra por 1,76 tiles na mediana, quase o mesmo que um de stat 80 a 10 til
 Investir em Explosivos praticamente não compra precisão. Com `potent 3` o expert passa
 a acertar (0,57t) e o novato continua espalhando granada (3,17t p50, 6,34t p90).
 
-O corte de `GR_dist_pen` de 18 para 8 é o que tira a dupla punição de distância; o erro
+O corte de `const.EO.DeviationGrenadeDistPen` de 18 para 8 é o que tira a dupla punição de distância; o erro
 continua crescendo com o alcance, porque já é proporcional ao vetor — só para de crescer
 duas vezes.
 
@@ -259,7 +259,7 @@ Compare com a coluna "(mudo)" da seção 2, onde uma única faixa sem nome levav
 1. `BUGFIX` do clamp de unidades — muda direção do erro, não a magnitude.
 2. `BUGFIX` do `wound_penalty` — faz o Wounded existir e a tooltip parar de mentir.
 3. Rótulo novo na faixa muda — feedback antes de balanço.
-4. Tuning: `potent`, `grenade_length_factor`, `GR_dist_pen` (Proposta B), validando na
+4. Tuning: `potent`, `grenade_length_factor`, `const.EO.DeviationGrenadeDistPen` (Proposta B), validando na
    bancada.
 5. Hardening de floats para `MulDivRound`.
 
