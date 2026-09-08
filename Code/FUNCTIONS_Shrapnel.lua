@@ -67,7 +67,7 @@ end
 function get_FragLevel(grenade)
     local num = grenade.r_shrap_num
     if not num then
-        return 0
+        return "None"
     end
     if num > 630 then
         return "High"

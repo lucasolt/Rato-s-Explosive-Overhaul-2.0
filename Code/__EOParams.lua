@@ -4,9 +4,7 @@ const.EO = const.EO or {}
 
 
 const.EO.DazedCTHPenalty = -30
-const.EO.HeavyRainIEDMisfireMul = 110
-const.EO.ShapedChargeAccPenalty = -25
-const.EO.ShapedChargeBarryAccBonus = 5
+const.EO.HeavyRainIEDMisfireMul = 115
 
 ---- Estilhacos: forma da distribuicao (ver FUNCTIONS_Shrapnel_VectorGenerators.lua).
 ---- Estes defaults reproduzem a distribuicao que a v1 produzia por descarte.
@@ -106,11 +104,12 @@ const.EO.DeviationRPGDistPen = 6 -- 12 ---- Higher = less accurate
 const.EO.DeviationGLDistPen = 6 -- 12 ---- Higher = less accurate
 
 ---- status effects/ other penalties
-const.EO.DeviationWoundPenaltyStack = 5 ---- Higher = less accurate
+const.EO.DeviationWoundStackPenalty = 5 ---- Higher = less accurate
 const.EO.DeviationInnacuratePenalty = 15 ---- Higher = less accurate
 const.EO.DeviationBlindDazedPenalty = 20 ---- Higher = less accurate
-const.EO.DeviationHeavyRainPenalty = 10 ---- Higher = less accurate
+--const.EO.DeviationHeavyRainPenalty = 10 ---- Higher = less accurate
 
 ------ Get item accuracy modidifers
-const.EO.DeviationUnderSlungGLBonus = -10 --- higher = more accurate
-
+const.EO.DeviationUnderSlungGLModifier = -10 --- higher = more accurate
+const.EO.ShapedChargeOthersAccModifier = -25
+const.EO.ShapedChargeBarryAccModifier = 5

@@ -372,7 +372,7 @@ function EO_GetWoundPenalty_Deviation(unit)
     local max_wounds = GameRuleDefs.HeavyWounds:ResolveValue("MaxWoundsEffect")
 
     local stacks = Min(max_wounds, wounds.stacks)
-    return stacks * const.EO.DeviationWoundPenaltyStack
+    return stacks * const.EO.DeviationWoundStackPenalty
 end
 
 if EO_DeviationDebugRoll == nil then
@@ -448,7 +448,7 @@ function Grenade:get_throw_accuracy(unit)
     end
 
     if IsKindOf(self, "ShapedCharge") then
-        acc = unit and unit.unitdatadef_id == "Barry" and acc + const.EO.ShapedChargeBarryAccBonus or acc + const.EO.ShapedChargeAccPenalty
+        acc = unit and unit.unitdatadef_id == "Barry" and acc + const.EO.ShapedChargeBarryAccModifier or acc + const.EO.ShapedChargeOthersAccModifier
     end
     return acc
 end
@@ -488,7 +488,7 @@ end
 function GrenadeLauncher:get_throw_accuracy(unit)
     if unit then
         local active_wep = unit:GetActiveWeapons()
-        return self == active_wep and 0 or const.EO.DeviationUnderSlungGLBonus
+        return self == active_wep and 0 or const.EO.DeviationUnderSlungGLModifier
     end
     return 0
 end
