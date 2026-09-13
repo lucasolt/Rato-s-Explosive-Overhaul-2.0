@@ -1,60 +1,40 @@
-function place_explosion_FXs()
-	local fx_list = rat_HE_fxs()
+---- Cada regra recebe um id fixo e legivel: RATONADE_<actor>_<classe FX>_<n>.
+---- Estavel entre loads e igual em toda maquina.
+----
+---- A lista e montada DE NOVO para cada actor: PlaceObj com tabela (StoreAsTable) usa a
+---- propria tabela como objeto. Reaproveitar a mesma lista entre actors fazia todos os
+---- buckets do FXRules apontarem para o mesmo objeto, com o Actor e o id do ultimo actor.
+local function place_fx_rules(actor, fx_list, skip)
+	for class, class_fxs in sorted_pairs(fx_list) do
+		for i, fx in ipairs(class_fxs) do
+			if not (skip and skip(fx)) then
+				fx.Actor = actor
+				fx.id = string.format("RATONADE_%s_%s_%d", actor, class, i)
+				fx = PlaceObj(class, fx)
+				AddInRules(fx)
+			end
+		end
+	end
+end
 
+function place_explosion_FXs()
 	local actor_list = {"HE_Grenade_1", "TNTBolt_IED", "NailBomb_IED", "NailBomb_IED_Misfired", "TNTBolt_IED_Misfired"}
 	local exclude_pin_sound = {"TNTBolt_IED", "NailBomb_IED", "NailBomb_IED_Misfired", "TNTBolt_IED_Misfired"}
 
 	for _, actor in ipairs(actor_list) do
-		local exclude_sound = table.find(exclude_pin_sound, actor)
-
-		for class, class_fxs in sorted_pairs(fx_list) do
-			for _, fx in ipairs(class_fxs) do
-				if fx.Action == "GrenadeActivate" then
-					if not exclude_sound then
-						fx.Actor = actor
-						fx.id = rat_generate_random_id()
-						fx = PlaceObj(class, fx)
-						AddInRules(fx)
-					end
-				else
-					fx.Actor = actor
-					fx.id = rat_generate_random_id()
-					fx = PlaceObj(class, fx)
-					AddInRules(fx)
-					-- print(fx)
-				end
-			end
+		local skip = table.find(exclude_pin_sound, actor) and function(fx)
+			return fx.Action == "GrenadeActivate"
 		end
+		place_fx_rules(actor, rat_HE_fxs(), skip)
 	end
 end
 
 function place_flashbang_FXs()
-	local fx_list = rat_flashbang_fxs()
-
 	local actor_list = {"ConcussiveGrenade_IED", "ConcussiveGrenade_IED_Misfired"}
 
 	for _, actor in ipairs(actor_list) do
-		for class, class_fxs in sorted_pairs(fx_list) do
-			for _, fx in ipairs(class_fxs) do
-				fx.Actor = actor
-				fx.id = rat_generate_random_id()
-				fx = PlaceObj(class, fx)
-				AddInRules(fx)
-				-- print(fx)
-			end
-		end
+		place_fx_rules(actor, rat_flashbang_fxs())
 	end
-end
-
---- These ids used to come from math.random, which is seeded independently on
---- every machine. The FX rules themselves are presentation only, but there is
---- no reason for the mod to hold any async randomness: a counter gives every
---- machine the same ids in the same order.
---- The counter is a FirstLoad global (see ____init_globals.lua) so that it keeps
---- counting across a mod reload instead of handing out ids already registered.
-function rat_generate_random_id()
-	rat_fx_id_counter = (rat_fx_id_counter or 0) + 1
-	return string.format("99%014d", rat_fx_id_counter)
 end
 
 function rat_HE_fxs()

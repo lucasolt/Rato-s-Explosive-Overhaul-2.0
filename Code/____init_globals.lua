@@ -7,7 +7,5 @@ if FirstLoad then
     rat_original_AddItemsToInventory = AddItemsToInventory
     -------------
     ratG_simple_ied_misfire = true
-    -- deterministic FX rule ids (see FX_PlaceObj.lua); kept across mod reloads
-    rat_fx_id_counter = 0
     -- landmine_original_UpdateTriggerRadiusFx = Landmine.UpdateTriggerRadiusFx
 end
