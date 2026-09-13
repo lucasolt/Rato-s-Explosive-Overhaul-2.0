@@ -266,6 +266,14 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     local dist_pct = mr_tiles > 0 and Min(100, MulDivRound(dist_m, 100, mr_tiles * 1000)) or 100
 
     local roll = throw_dice(100, num_dice, unit) + 1
+
+    ---- BUGFIX (B12) desync: os dois rolls de direcao saem SEMPRE, antes de qualquer
+    ---- early return. O "radius <= 0" depende de mod options locais (deviate_stat,
+    ---- grenade_throw_diff, dificuldade da IA) e de cheat; pular os rolls num acerto
+    ---- perfeito fazia cada maquina consumir uma quantidade diferente do InteractionRand.
+    local dir_roll = InteractionRand(2001, "RATONADE_DeviationDir", unit) - 1000
+    local flip_roll = InteractionRand(2, "RATONADE_DeviationFlip", unit)
+
     roll = CheatEnabled("AlwaysHit") and 1 or roll
     roll = CheatEnabled("AlwaysMiss") and 99 or roll
 
@@ -306,11 +314,11 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     ---- direcao: theta = 90deg * sinal(u) * |u|^const.EO.DeviationDirBias, u uniforme em [-1000, 1000].
     ---- const.EO.DeviationDirBias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
     ---- em vez de espalhar para os lados.
-    local u = InteractionRand(2001, "RATONADE_DeviationDir", unit) - 1000
+    local u = dir_roll
     local sign = u < 0 and -1 or 1
     local shaped = pow_milli(abs(u), const.EO.DeviationDirBias)
     local angle = sign * MulDivRound(90 * 60, shaped, 1000)
-    if InteractionRand(2, "RATONADE_DeviationFlip", unit) == 1 then
+    if flip_roll == 1 then
         angle = angle + 180 * 60
     end
 

@@ -1,12 +1,16 @@
 ---- Locais de modulo: evitam um lookup de global por chamada dentro dos lacos quentes
 ---- (um estilhaco de HE_Grenade roda isto 700 vezes por explosao).
 local sin, cos, acos, sqrt, tan, pi = math.sin, math.cos, math.acos, math.sqrt, math.tan, math.pi
-local random = math.random
+---- BUGFIX (B12) desync: nada de math.random aqui. Ele e async (semente propria por
+---- maquina), entao em co-op cada jogador gerava uma nuvem de estilhacos diferente.
+---- Os dois geradores recebem uma semente sincronizada e devolvem o estado avancado
+---- (rat_rand_* em FUNCTIONS_Util.lua).
 
 ---- PERF (C4): invariantes do cone hasteados para fora do laco.
-function generateShrapnelPositionsInCone(numPositions, radius, center, args)
+function generateShrapnelPositionsInCone(numPositions, radius, center, args, seed)
 	local positions = {}
 	local n = 0
+	seed = rat_rand_seed(seed)
 
 	local angle_radians = args.angle_deg * pi / 180
 	---- so a chamada de tan sai do laco; a ordem das multiplicacoes de h continua sendo a
@@ -23,8 +27,11 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 	local angle_offset = (args.dir_angle - spread_orient)
 
 	for i = 1, numPositions do
-		local theta = random() * two_pi
-		local h = random() * radius * tan_half
+		local r1, r2
+		r1, seed = rat_rand_float(seed)
+		r2, seed = rat_rand_float(seed)
+		local theta = r1 * two_pi
+		local h = r2 * radius * tan_half
 
 		local p = point(cx + cos(theta) * h, cy + sin(theta) * h, cz + sqrt(radius_sq - h * h))
 		p = RotateAxis(p, axis_x_p, 90 * 60, center)
@@ -40,7 +47,7 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 		end
 	end
 
-	return positions
+	return positions, seed
 end
 
 ---- ============================================================================
@@ -80,16 +87,17 @@ end
 ---- NAO ha mais descarte: numPositions e o numero de raios TRACADOS. Quem chama
 ---- aplica EO.ShrapTracedPct sobre o r_shrap_num para manter a mesma contagem de
 ---- CheckLOF de antes -- o custo por explosao nao muda.
-function generateShrapnelPositions(numPositions, radius, center, want_debug)
+function generateShrapnelPositions(numPositions, radius, center, want_debug, seed)
 	local positions = {}
 	local phis_list = want_debug and {} or nil
 	local theta_list = want_debug and {} or nil
 
 	if numPositions < 1 then
-		return positions, phis_list, theta_list
+		return positions, phis_list, theta_list, seed
 	end
+	seed = rat_rand_seed(seed)
 
-	---- inteiro: math.random(-x, x) exige argumento com representacao inteira, e a regra
+	---- inteiro: rat_rand_range exige limites inteiros, e a regra
 	---- do projeto e MulDivRound em vez de float (ver CLAUDE.md).
 	local maxRandomOffset = MulDivRound(const.SlabSizeX, 15, 100)
 
@@ -124,16 +132,18 @@ function generateShrapnelPositions(numPositions, radius, center, want_debug)
 
 		local theta = two_pi * (i - 1) / goldenRatio
 
-		positions[i] = point(horiz * cos(theta) + cx + random(-maxRandomOffset, maxRandomOffset),
-		                     horiz * sin(theta) + cy + random(-maxRandomOffset, maxRandomOffset),
-		                     cz + zr + random(-maxRandomOffset, maxRandomOffset))
+		local ox, oy, oz
+		ox, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
+		oy, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
+		oz, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
+		positions[i] = point(horiz * cos(theta) + cx + ox, horiz * sin(theta) + cy + oy, cz + zr + oz)
 		if want_debug then
 			phis_list[i] = elev
 			theta_list[i] = theta
 		end
 	end
 
-	return positions, phis_list, theta_list
+	return positions, phis_list, theta_list, seed
 end
 
 ---- Fora do caminho quente desde o PERF (C1) -- generateShrapnelPositions nao chama mais.

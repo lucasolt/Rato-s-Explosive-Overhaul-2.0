@@ -3,10 +3,12 @@ function processIEDmisfire(weapon, unit)
     local opt = tonumber(CurrentModOptions.mifire_chance_mul or 100)
     -- print("opt", opt)
 
-    if weapon and weapon.is_ied and opt ~= 0 then
-        if CheatEnabled("AlwaysMiss") then
-            return true
-        end
+    --- BUGFIX (B12) multiplayer sync: the rolls below come out of the shared InteractionRand
+    --- sequence, so they must be consumed whenever an IED goes off, no matter
+    --- what the *local* misfire multiplier is set to and no matter what cheats
+    --- the local player has on. Skipping them for a player who set the
+    --- multiplier to 0 shifted that player's sequence and desynced the session.
+    if weapon and weapon.is_ied then
         local chance
         if ratG_simple_ied_misfire then
             chance = simple_IED_misfire_Chance(unit)
@@ -40,6 +42,15 @@ function processIEDmisfire(weapon, unit)
 
         local roll = InteractionRand(100, "RATONADE_IEDMisfire_Roll") + 1 -- unit:Random(100) + 1
         -- print("chance", chance, "roll", roll)
+
+        --- Local-only overrides are applied after the rolls, never instead of them.
+        if opt == 0 then
+            return false
+        end
+        if CheatEnabled("AlwaysMiss") then
+            return true
+        end
+
         if roll <= chance then
             -- print("misfire")
             return true

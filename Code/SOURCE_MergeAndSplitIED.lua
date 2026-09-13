@@ -162,7 +162,7 @@ if not ratG_simple_ied_misfire then
 
 			table.sort(other_stack_items, function(a, b)
 				local a_a = a.Amount + get_local_changes(a)
-				local b_a = b.Amount + get_local_changes(a)
+				local b_a = b.Amount + get_local_changes(b)
 				return a_a > b_a
 			end)
 

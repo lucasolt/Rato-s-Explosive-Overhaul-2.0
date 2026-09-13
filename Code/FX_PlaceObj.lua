@@ -7,7 +7,7 @@ function place_explosion_FXs()
 	for _, actor in ipairs(actor_list) do
 		local exclude_sound = table.find(exclude_pin_sound, actor)
 
-		for class, class_fxs in pairs(fx_list) do
+		for class, class_fxs in sorted_pairs(fx_list) do
 			for _, fx in ipairs(class_fxs) do
 				if fx.Action == "GrenadeActivate" then
 					if not exclude_sound then
@@ -34,7 +34,7 @@ function place_flashbang_FXs()
 	local actor_list = {"ConcussiveGrenade_IED", "ConcussiveGrenade_IED_Misfired"}
 
 	for _, actor in ipairs(actor_list) do
-		for class, class_fxs in pairs(fx_list) do
+		for class, class_fxs in sorted_pairs(fx_list) do
 			for _, fx in ipairs(class_fxs) do
 				fx.Actor = actor
 				fx.id = rat_generate_random_id()
@@ -46,8 +46,15 @@ function place_flashbang_FXs()
 	end
 end
 
+--- These ids used to come from math.random, which is seeded independently on
+--- every machine. The FX rules themselves are presentation only, but there is
+--- no reason for the mod to hold any async randomness: a counter gives every
+--- machine the same ids in the same order.
+--- The counter is a FirstLoad global (see ____init_globals.lua) so that it keeps
+--- counting across a mod reload instead of handing out ids already registered.
 function rat_generate_random_id()
-	return tostring(math.random(1000000000000000, 9999999999999999))
+	rat_fx_id_counter = (rat_fx_id_counter or 0) + 1
+	return string.format("99%014d", rat_fx_id_counter)
 end
 
 function rat_HE_fxs()
