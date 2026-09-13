@@ -174,6 +174,18 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
         CreateFloatingText(target_pos, float_text)
     end
 
+    --- Multiplayer sync: both sign rolls have to happen unconditionally.
+    --- They used to be skipped on a perfect throw, but whether a throw is
+    --- perfect depends on mod options that are set per player (deviate_stat,
+    --- grenade_throw_diff, AI_skill_throw_diff, ai_deviate_hc). Skipping them
+    --- made the players consume a different number of values from the shared
+    --- InteractionRand sequence, desyncing every roll that came after.
+    local angle_sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
+    angle_sign = angle_sign == 1 and 1 or -1
+
+    local sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
+    sign = sign == 1 and 1 or -1
+
     if perfect_throw then
         return false
     end
@@ -182,13 +194,8 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
         rotation_factor = rotation_factor * accurate_angle_mul
     end
 
-    local sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
-    sign = sign == 1 and 1 or -1
-    local angle_of_rotation = rotation_factor * 60 * deviation / 5 * sign
+    local angle_of_rotation = rotation_factor * 60 * deviation / 5 * angle_sign
     local dir = target_pos - attack_pos
-
-    sign = InteractionRand(2, "RATONADE_DeviationSign", unit)
-    sign = sign == 1 and 1 or -1
 
     local length_factor = is_grenade and grenade_length_factor or launcher_length_factor
     local distance_multiplier = length_factor * deviation * sign

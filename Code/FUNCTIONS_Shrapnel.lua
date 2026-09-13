@@ -85,6 +85,16 @@ end
 function GetShrapnelResults(self, explosion_pos, attacker)
 
     local attacker = attacker or g_Units[1]
+
+    ----------------- Multiplayer sync
+    -- Everything below can be short-circuited or resized by *local* mod options
+    -- (shrap_num, shrap_dmg, ...). Rolling the synced RNG inside those branches
+    -- means two players consume a different number of values from the unit's
+    -- random stream, which permanently desyncs every later roll for that unit.
+    -- So the synced stream is touched here, exactly twice, before any branch,
+    -- and every per-shrapnel value is derived from a local deterministic stream.
+    local lof_seed = attacker:Random()
+    local shrap_seed = rat_rand_seed(attacker:Random())
     -----------------
     local num_shrap
 
@@ -136,9 +146,12 @@ function GetShrapnelResults(self, explosion_pos, attacker)
             radius = self.AreaOfEffect * const.SlabSizeX
         }
 
-        shrapnels = generateShrapnelPositionsInCone(num_shrap, radius, explosion_pos, cone_args)
+        shrapnels, shrap_seed = generateShrapnelPositionsInCone(num_shrap, radius, explosion_pos,
+                                                                cone_args, shrap_seed)
     else
-        shrapnels, phis, thetas = generateShrapnelPositions(num_shrap, radius, explosion_pos)
+        shrapnels, phis, thetas, shrap_seed = generateShrapnelPositions(num_shrap, radius,
+                                                                        explosion_pos, nil,
+                                                                        shrap_seed)
     end
 
     if debug_shrap_vec then
@@ -161,7 +174,7 @@ function GetShrapnelResults(self, explosion_pos, attacker)
     local lof_args = {}
     lof_args.fire_relative_point_attack = false
     lof_args.ignore_colliders = false -- compile_ignore_colliders(killed_colliders, target_unit)
-    lof_args.seed = attacker:Random()
+    lof_args.seed = lof_seed
     lof_args.ignore_los = true
     lof_args.inside_attack_area_check = false
     lof_args.forced_hit_on_eye_contact = false
@@ -216,7 +229,15 @@ function GetShrapnelResults(self, explosion_pos, attacker)
         lof_args.target_pos = final_pos
         lof_args.attack_pos = explosion_pos + SetLen(final_pos - explosion_pos, guic * 12)
 
-        local random_f = 100 - cRound(gren_random / 2) + attacker:Random(gren_random)
+        local random_roll
+        random_roll, shrap_seed = rat_rand_range(shrap_seed, 0, gren_random - 1)
+        local random_f = 100 - cRound(gren_random / 2) + random_roll
+
+        -- seed for this piece's status effect roll, taken from the same
+        -- deterministic stream so the number of shrapnel pieces never changes
+        -- how much of the unit's synced random stream gets consumed
+        local effect_seed
+        effect_seed, shrap_seed = rat_rand_range(shrap_seed, 1, 2147483646)
 
         local attack_data = CheckLOF(final_pos, lof_args)
 
@@ -291,7 +312,7 @@ function GetShrapnelResults(self, explosion_pos, attacker)
                 else
 
                     sharpnel_weapon:calc_shrap_damage(hit_data, false, random_f, dist_t,
-                                                      max_shrap_dmg_red)
+                                                      max_shrap_dmg_red, effect_seed)
 
                     if IsKindOf(hit.obj, "Unit") and debug_log then
 
@@ -366,7 +387,8 @@ function GetShrapnelResults(self, explosion_pos, attacker)
 
 end
 
-function Firearm:calc_shrap_damage(hit_data, ricochet_idx, random_f, dist_t, max_shrap_dmg_red)
+function Firearm:calc_shrap_damage(hit_data, ricochet_idx, random_f, dist_t, max_shrap_dmg_red,
+                                   effect_seed)
 
     local attacker = hit_data.obj
     local target = hit_data.target
@@ -457,7 +479,7 @@ function Firearm:calc_shrap_damage(hit_data, ricochet_idx, random_f, dist_t, max
         ---
         self:shrap_precalc_damage_and_effects(attacker, obj, hit_data.step_pos, hit.damage, hit,
                                               hit_data.applied_status, hit_data, breakdown, action,
-                                              prediction, effect_chance)
+                                              prediction, effect_chance, effect_seed)
         ---
         hit.impact_force = hit.damage > 0 and impact_force +
                                self:GetDistanceImpactForce(hit.distance) or 0
@@ -492,13 +514,15 @@ end
 
 function BaseWeapon:shrap_precalc_damage_and_effects(attacker, target, attack_pos, damage, hit,
                                                      effect, attack_args, record_breakdown, action,
-                                                     prediction, effect_chance)
+                                                     prediction, effect_chance, effect_seed)
     if IsKindOf(target, "Unit") then
         local effects = EffectsTable(effect) -- EffectsTable("Bleeding")
         -- print("effects", effects)
 
         -----------------------------
-        local effect_roll = 1 + attacker:Random(100)
+        -- deterministic: the caller hands over a seed taken from the explosion's
+        -- own stream, so this roll does not touch the unit's synced sequence
+        local effect_roll = 1 + (rat_rand_range(effect_seed or attacker:Random(), 0, 99))
 
         if effect_roll <= cRound(effect_chance * 1.2) then
             EffectTableAdd(effects, "Bleeding")

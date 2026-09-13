@@ -138,3 +138,57 @@ function extractNumberWithSignFromString(str)
         return false
     end
 end
+
+--------------------------------------------------------------------------------
+-- Deterministic (multiplayer-safe) pseudo random stream
+--------------------------------------------------------------------------------
+-- Lua's math.random is an *async* source: it is not part of the game's synced
+-- random state, so two machines in a co-op session will produce different
+-- sequences. Anything derived from it (shrapnel positions -> hits -> damage)
+-- diverges immediately and desyncs the session.
+--
+-- These helpers implement a Lehmer/Park-Miller generator using only integer
+-- arithmetic that stays well inside double precision (16807 * 2147483646 is
+-- about 3.6e13, far below 2^53), so every machine gets bit identical results
+-- from the same seed. Seed them once from a synced source (unit:Random() or
+-- InteractionRand) and then thread the returned state through the calls.
+
+local RAT_RAND_M = 2147483647 -- 2^31 - 1
+local RAT_RAND_A = 16807
+
+-- Advances the state. Returns the new state, always in [1, RAT_RAND_M - 1].
+function rat_rand_next(state)
+    state = (tonumber(state) or 1) % RAT_RAND_M
+    if state <= 0 then
+        state = state + RAT_RAND_M - 1
+    end
+    return (RAT_RAND_A * state) % RAT_RAND_M
+end
+
+-- math.random() replacement: float in [0, 1). Returns value, new_state.
+function rat_rand_float(state)
+    state = rat_rand_next(state)
+    return (state - 1) * 1.0 / ((RAT_RAND_M - 1) * 1.0), state
+end
+
+-- math.random(min, max) replacement: integer in [min, max]. Returns value, new_state.
+-- Bounds are floored inline instead of going through cRound: this runs once per
+-- shrapnel piece (hundreds per explosion) and cRound formats strings.
+function rat_rand_range(state, min, max)
+    state = rat_rand_next(state)
+    min = min - min % 1
+    max = max - max % 1
+    if max < min then
+        min, max = max, min
+    end
+    local span = max - min + 1
+    if span <= 1 then
+        return min, state
+    end
+    return min + (state % span), state
+end
+
+-- Builds a starting state from any synced integer (unit:Random(), InteractionRand, ...).
+function rat_rand_seed(value)
+    return rat_rand_next((tonumber(value) or 1) + 1)
+end

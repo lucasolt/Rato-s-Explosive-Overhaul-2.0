@@ -1,6 +1,15 @@
-function generateShrapnelPositionsInCone(numPositions, radius, center, args)
+--- The shrapnel scatter used to be driven by math.random, which is not part of
+--- the game's synced random state. In co-op each machine rolled its own values,
+--- so the shrapnel cloud (and therefore every hit and every point of damage it
+--- caused) differed between players. Both generators now take a deterministic
+--- seed and hand the advanced state back to the caller, so the whole cloud is
+--- reproducible from one synced roll.
+
+function generateShrapnelPositionsInCone(numPositions, radius, center, args, seed)
 	local positions = {}
 	local phis_list = {}
+
+	seed = rat_rand_seed(seed)
 
 	local angle_radians = args.angle_deg * math.pi / 180
 	-- local count = 0
@@ -10,8 +19,12 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 	local angle_offset = (args.dir_angle - spread_orient)
 
 	for i = 1, numPositions do
-		local theta = math.random() * 2 * math.pi
-		local h = math.random() * radius * math.tan(angle_radians / 2)
+		local r1, r2
+		r1, seed = rat_rand_float(seed)
+		r2, seed = rat_rand_float(seed)
+
+		local theta = r1 * 2 * math.pi
+		local h = r2 * radius * math.tan(angle_radians / 2)
 
 		local x = center:x() + math.cos(theta) * h
 		local y = center:y() + math.sin(theta) * h
@@ -29,14 +42,16 @@ function generateShrapnelPositionsInCone(numPositions, radius, center, args)
 		-- table.insert(phis_list, theta)  -- Store the theta angle for potential use
 	end
 	-- print("count", count)
-	return positions -- , phis_list
+	return positions, seed -- , phis_list
 end
 
-function generateShrapnelPositions(numPositions, radius, center, cone_args)
+function generateShrapnelPositions(numPositions, radius, center, cone_args, seed)
 	local positions = {}
 	local phis_list = {}
 	local theta_list = {}
 	local vectors, phis, thetas = generateShrapnelVectors(numPositions)
+
+	seed = rat_rand_seed(seed)
 
 	local maxRandomOffset = const.SlabSizeX * 0.15
 
@@ -46,9 +61,10 @@ function generateShrapnelPositions(numPositions, radius, center, cone_args)
 		local y = v[2] * radius + center:y()
 		local z = v[3] * radius + center:z()
 
-		local xOffset = math.random(-maxRandomOffset, maxRandomOffset)
-		local yOffset = math.random(-maxRandomOffset, maxRandomOffset)
-		local zOffset = math.random(-maxRandomOffset, maxRandomOffset)
+		local xOffset, yOffset, zOffset
+		xOffset, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
+		yOffset, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
+		zOffset, seed = rat_rand_range(seed, -maxRandomOffset, maxRandomOffset)
 
 		x = x + xOffset
 		y = y + yOffset
@@ -62,7 +78,7 @@ function generateShrapnelPositions(numPositions, radius, center, cone_args)
 		end
 	end
 
-	return positions, phis_list, theta_list
+	return positions, phis_list, theta_list, seed
 end
 
 function generateShrapnelVectors(numVectors)
@@ -92,4 +108,3 @@ function generateShrapnelVectors(numVectors)
 
 	return vectors, phis, thetas
 end
-
