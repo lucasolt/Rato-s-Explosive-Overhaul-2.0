@@ -179,7 +179,9 @@ if EO_DeviationDebug == nil then
     EO_DeviationDebug = false
 end
 
-EO_DeviationRollResultsDebug = Platform.rat
+if EO_DeviationRollResultsDebug == nil then
+	EO_DeviationRollResultsDebug = Platform.rat
+end
 
 if EO_DeviationRings == nil then
     EO_DeviationRings = true
@@ -222,7 +224,7 @@ end
 
 ---- Uma linha por arremesso, com tudo que esta desenhado no mapa.
 function EO_PrintDeviation(info)
-    if not EO_DeviationRollResultsDebug then-- or not Platform.developer then
+    if not Platform.rat or not EO_DeviationRollResultsDebug then-- or not Platform.developer then
         return
     end
     local pct = {}

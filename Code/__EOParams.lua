@@ -47,7 +47,7 @@ const.EO.ShrapElevShape = 100 ---- expoente x100 na banda: 100 = uniforme, >100 
 const.EO.DeviationMinBASE = 1350 ---- erro minimo no stat 0, em milesimos de tile
 const.EO.DeviationMinSCALE = 750 ---- r_min chega a zero por volta de ui 51
 const.EO.DeviationMaxBASE = 6900--6900 ---- erro maximo no stat 0
-const.EO.DeviationMaxSCALE = 5500--6000 ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
+const.EO.DeviationMaxSCALE = 6000--5500-- ---- quanto a skill baixa o teto -> r_max(100) = 0.73 t
 
 ---- (const.EO.DeviationMaxSCALE - const.EO.DeviationMinSCALE) e a taxa com que a faixa ESTREITA conforme a skill sobe:
 ---- positivo = skill compra consistencia; zero = skill desloca a faixa inteira (precisao pura)
