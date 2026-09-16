@@ -41,13 +41,7 @@ return {
 	}),
 	PlaceObj('ModItemCharacterEffectCompositeDef', {
 		'Id', "dazed_flashbang",
-		'Parameters', {
-			PlaceObj('PresetParamPercent', {
-				'Name', "cth_effect",
-				'Value', -40,
-				'Tag', "<cth_effect>%",
-			}),
-		},
+		'Parameters', {},
 		'object_class', "CharacterEffect",
 		'msg_reactions', {
 			PlaceObj('MsgReaction', {
