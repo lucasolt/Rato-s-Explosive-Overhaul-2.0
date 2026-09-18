@@ -180,8 +180,10 @@ if EO_DeviationDebug == nil then
 end
 
 if EO_DeviationRollResultsDebug == nil then
-	EO_DeviationRollResultsDebug = Platform.rat
+	EO_DeviationRollResultsDebug = false
 end
+
+EO_DeviationRollResultsDebug = Platform.rat
 
 if EO_DeviationRings == nil then
     EO_DeviationRings = true
