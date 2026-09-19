@@ -4,26 +4,32 @@ function disable_normal_explosive_crafting()
         return
     end
     local recipes = g_RecipesCraftExplosives
+    if type(recipes) ~= "table" then
+        return
+    end
     local to_remove_item = {
         "IncendiaryGrenade", "FragGrenade", "ConcussiveGrenade", "HE_Grenade", "HE_Grenade_1",
         "SmokeGrenade", "TearGasGrenade"
     }
-    local to_remove = {}
-    for i, recipe in ipairs(recipes) do
-        if table.find(to_remove_item, recipe.item_id) then
-            table.insert(to_remove, recipe)
+    for i = #recipes, 1, -1 do
+        if table.find(to_remove_item, recipes[i].item_id) then
+            table.remove(recipes, i)
         end
     end
-    for i, remove in ipairs(to_remove) do
-        table.remove_value(recipes, remove)
-        print("removing craft recipe:", remove.item_id)
-    end
+end
+
+-- Fill builds the list on first open, unfiltered; pruning only before Validate missed it
+local original_SectorOperationFillItemsToCraft = SectorOperationFillItemsToCraft
+function SectorOperationFillItemsToCraft(sector_id, operation_id, merc)
+    local result = original_SectorOperationFillItemsToCraft(sector_id, operation_id, merc)
+    disable_normal_explosive_crafting()
+    return result
 end
 
 local original_SectorOperationValidateItemsToCraft = SectorOperationValidateItemsToCraft
 function SectorOperationValidateItemsToCraft(sector_id, operation_id, merc)
-    disable_normal_explosive_crafting()
     original_SectorOperationValidateItemsToCraft(sector_id, operation_id, merc)
+    disable_normal_explosive_crafting()
 end
 --[[ function OnMsg.DataLoaded()
 	print("trying to disable explosive craft")
