@@ -179,11 +179,11 @@ if EO_DeviationDebug == nil then
     EO_DeviationDebug = false
 end
 
+---- Platform.rat e nil fora da maquina do autor: atribuir ele direto deixava o global nil
+---- (= indefinido) e a proxima leitura estourava "undefined global".
 if EO_DeviationRollResultsDebug == nil then
-	EO_DeviationRollResultsDebug = false
+	EO_DeviationRollResultsDebug = Platform.rat and true or false
 end
-
-EO_DeviationRollResultsDebug = Platform.rat
 
 if EO_DeviationRings == nil then
     EO_DeviationRings = true
