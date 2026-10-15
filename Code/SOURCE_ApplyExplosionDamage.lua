@@ -7,6 +7,9 @@ function ApplyExplosionDamage(attacker, fx_actor, results, noise, disableBurnFx,
         local time = GameTime()
         if shr_results then
             shrapnel_Execute(shr_results, time)
+            ---- BUGFIX (B13): as threads ja tem o que precisam; nao deixa o resultado
+            ---- (hits, lof_args, um por estilhaco) pendurado no results do ataque.
+            results.shrapnel_results = nil
         elseif IsKindOf(weapon, "Ordnance") and results.attack_from_stealth == nil then
             shr_results = GetShrapnelResults(weapon, explosion_pos, attacker)
             shrapnel_Execute(shr_results, time)

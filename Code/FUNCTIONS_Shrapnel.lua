@@ -174,9 +174,11 @@ function GetShrapnelResults(self, explosion_pos, attacker)
         end
     end
 
-    for i, unit in ipairs(g_Units) do
-        unit.shrap_received = 0
-    end
+    ---- BUGFIX (B13): a contagem de estilhacos por unidade era gravada em unit.shrap_received,
+    ---- uma property da Unit -- zerada em TODAS as unidades a cada explosao e nunca limpa
+    ---- depois, entao o valor da ultima explosao ficava pendurado na unidade (e no save).
+    ---- Agora vive numa tabela local que morre junto com a chamada.
+    local shrap_received = {}
 
     local final_pos
 
@@ -275,7 +277,8 @@ function GetShrapnelResults(self, explosion_pos, attacker)
                 -------
 
                 ------ Damage Control
-                if hit.obj.shrap_received >= shrap_num_for_max then
+                local received = shrap_received[hit.obj] or 0
+                if received >= shrap_num_for_max then
                     -- max_shrap_dmg_red = 1
                     max_shrap_received = true
 
@@ -284,12 +287,12 @@ function GetShrapnelResults(self, explosion_pos, attacker)
 					lof = attack_data.lof and attack_data.lof[1]
 					hit = lof and lof.hits and lof.hits[1]
 					hit_pos = hit and hit.pos ]]
-                elseif hit.obj.shrap_received >= shrap_num_for_diminish then
-                    max_shrap_dmg_red = Min(shrap_damage_penaltyMax, (hit.obj.shrap_received -
+                elseif received >= shrap_num_for_diminish then
+                    max_shrap_dmg_red = Min(shrap_damage_penaltyMax, (received -
                                                 shrap_num_for_diminish) * shrap_damage_penalty_step)
-                    hit.obj.shrap_received = hit.obj.shrap_received + 1
+                    shrap_received[hit.obj] = received + 1
                 else
-                    hit.obj.shrap_received = hit.obj.shrap_received + 1
+                    shrap_received[hit.obj] = received + 1
                 end
                 ------
             end

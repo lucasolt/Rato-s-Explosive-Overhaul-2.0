@@ -60,15 +60,15 @@ local function band_text(b, is_grenade)
         return nil
     end
     BAND_TEXTS = BAND_TEXTS or {
-        Perfect = {T("Perfect Throw"), T("Perfect Launch")},
-        Great = {T("Great Throw"), T("Great Launch")},
+        Perfect = {T(541427622205, "Perfect Throw"), T(903049392424, "Perfect Launch")},
+        Great = {T(848191240968, "Great Throw"), T(495489938297, "Great Launch")},
         Innacurate = {
-            T("<color AmmoAPColor>Innacurate Throw</color>"),
-            T("<color AmmoAPColor>Innacurate Launch</color>")
+            T(240242162766, "<color AmmoAPColor>Inaccurate Throw</color>"),
+            T(705527903955, "<color AmmoAPColor>Inaccurate Launch</color>")
         },
         Terrible = {
-            T("<color AmmoAPColor>Terrible Throw</color>"),
-            T("<color AmmoAPColor>Terrible Launch</color>")
+            T(345947964190, "<color AmmoAPColor>Terrible Throw</color>"),
+            T(647378160160, "<color AmmoAPColor>Terrible Launch</color>")
         }
     }
     local row = BAND_TEXTS[b.name]
@@ -308,7 +308,7 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
             err = 0,
             is_grenade = is_grenade
         })
-        CreateFloatingText(target_pos, T("Perfect Throw"))
+        CreateFloatingText(target_pos, T(541427622205, "Perfect Throw"))
         return false
     end
 
@@ -545,25 +545,25 @@ end
 -------------
 function get_label_throwacc(num)
     if num == 100 then
-        return T("Perfect")
+        return T(635390636791, "Perfect")
     elseif num >= 90 then
-        return T("Very High")
+        return T(343522695543, "Very High")
     elseif num >= 80 then
-        return T("High")
+        return T(224058173643, "High")
     elseif num >= 70 then
-        return T("Moderately High")
+        return T(962085491215, "Moderately High")
     elseif num >= 60 then
-        return T("Medium")
+        return T(526794963176, "Medium")
     elseif num >= 50 then
-        return T("Moderately Low")
+        return T(491024478720, "Moderately Low")
     elseif num >= 40 then
-        return T("Low")
+        return T(480969167765, "Low")
     elseif num >= 30 then
-        return T("Very Low")
+        return T(241712020083, "Very Low")
     elseif num >= 20 then
-        return T("Extremely Low")
+        return T(462097595698, "Extremely Low")
     else
-        return T("Abysmal")
+        return T(584807118519, "Abysmal")
     end
 end
 ------------------Tests

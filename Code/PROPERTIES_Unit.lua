@@ -1,4 +1,6 @@
 function EO_unitprop()
+    ---- BUGFIX (B13): nao e mais escrita (GetShrapnelResults conta numa tabela local).
+    ---- Fica declarada so para saves antigos que ainda carregam o valor.
     UnitProperties.properties[#UnitProperties.properties + 1] = {
 
         id = "shrap_received",

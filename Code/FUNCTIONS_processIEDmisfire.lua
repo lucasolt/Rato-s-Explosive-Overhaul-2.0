@@ -171,7 +171,7 @@ function MishapProperties:IED_trap_OnLand(thrower, attackResults, visual_obj, or
     table.iclear(attackResults)
 
     --
-    CreateFloatingText(newLandmine:GetPos(), T("<color AmmoAPColor>IED Misfire</color>"))
+    CreateFloatingText(newLandmine:GetPos(), T(210548658593, "<color AmmoAPColor>IED Misfire</color>"))
     --
 
     attackResults.trap_placed = true
