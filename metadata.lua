@@ -54,6 +54,7 @@ return PlaceObj('ModDef', {
 		"Code/FUNCTIONS_IEDlootRules.lua",
 		"Code/FUNCTIONS_DynamicSpawnLandmine_MisfiredIED.lua",
 		"Code/FUNCTIONS_DeviateGrenade.lua",
+		"Code/UI_DeviationPreview.lua",
 		"Code/FUNCTIONS_RatonadeBounceCalcTrajectory.lua",
 		"Code/FUNCTIONS_BounceObjMaterialSpeed.lua",
 		"Code/FUNCTIONS_processIEDmisfire.lua",

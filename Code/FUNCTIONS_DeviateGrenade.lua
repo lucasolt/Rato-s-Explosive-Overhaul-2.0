@@ -262,6 +262,36 @@ function EO_PrintDeviation(info)
     print("--------------------------------------------------------------")
 end
 
+---- horizontal offset of a miss of `radius` milli-tiles along `dir`, from the two direction rolls
+local function deviation_offset(dir, radius, dir_roll, flip_roll)
+    ---- direcao: theta = 90deg * sinal(u) * |u|^const.EO.DeviationDirBias, u uniforme em [-1000, 1000].
+    ---- const.EO.DeviationDirBias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
+    ---- em vez de espalhar para os lados.
+    local u = dir_roll
+    local sign = u < 0 and -1 or 1
+    local shaped = pow_milli(abs(u), const.EO.DeviationDirBias)
+    local angle = sign * MulDivRound(90 * 60, shaped, 1000)
+    if flip_roll == 1 then
+        angle = angle + 180 * 60
+    end
+
+    local radius_world = MulDivRound(radius, const.SlabSizeX, 1000)
+    local offset = Rotate(SetLen(dir, radius_world), angle)
+
+    ---- const.EO.DeviationShortMul < 100 encurta so a metade que volta na direcao do arremessador
+    if const.EO.DeviationShortMul ~= 100 then
+        local fwd = SetLen(dir, 4096)
+        local along = MulDivRound(offset:x(), fwd:x(), 4096) +
+                          MulDivRound(offset:y(), fwd:y(), 4096)
+        if along < 0 then
+            local cut = MulDivRound(along, 100 - const.EO.DeviationShortMul, 100)
+            offset = offset -
+                         point(MulDivRound(fwd:x(), cut, 4096), MulDivRound(fwd:y(), cut, 4096), 0)
+        end
+    end
+    return offset
+end
+
 function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, test)
 
     local is_grenade = IsKindOf(self, "Grenade")
@@ -329,31 +359,7 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
         return false
     end
 
-    ---- direcao: theta = 90deg * sinal(u) * |u|^const.EO.DeviationDirBias, u uniforme em [-1000, 1000].
-    ---- const.EO.DeviationDirBias > 1 concentra o erro no eixo do arremesso (cai curto ou passa longe)
-    ---- em vez de espalhar para os lados.
-    local u = dir_roll
-    local sign = u < 0 and -1 or 1
-    local shaped = pow_milli(abs(u), const.EO.DeviationDirBias)
-    local angle = sign * MulDivRound(90 * 60, shaped, 1000)
-    if flip_roll == 1 then
-        angle = angle + 180 * 60
-    end
-
-    local radius_world = MulDivRound(radius, const.SlabSizeX, 1000)
-    local offset = Rotate(SetLen(dir, radius_world), angle)
-
-    ---- const.EO.DeviationShortMul < 100 encurta so a metade que volta na direcao do arremessador
-    if const.EO.DeviationShortMul ~= 100 then
-        local fwd = SetLen(dir, 4096)
-        local along = MulDivRound(offset:x(), fwd:x(), 4096) +
-                          MulDivRound(offset:y(), fwd:y(), 4096)
-        if along < 0 then
-            local cut = MulDivRound(along, 100 - const.EO.DeviationShortMul, 100)
-            offset = offset -
-                         point(MulDivRound(fwd:x(), cut, 4096), MulDivRound(fwd:y(), cut, 4096), 0)
-        end
-    end
+    local offset = deviation_offset(dir, radius, dir_roll, flip_roll)
 
     ---- o erro e uma distancia ATE O ALVO, nao uma fracao do vetor de arremesso
     local final_pos = target_pos + offset
@@ -388,6 +394,62 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     DbgAddCircle_devi(final_pos, const.SlabSizeX / 5, const.clrWhite)
 
     return final_pos
+end
+
+---- weighted percentile of a sample field; samples sorted in place by it
+local function weighted_pctl(samples, key, total, pct)
+    table.sort(samples, function(a, b) return a[key] < b[key] end)
+    local need, acc = MulDivRound(total, pct, 100), 0
+    for _, smp in ipairs(samples) do
+        acc = acc + smp.w
+        if acc >= need then
+            return smp[key]
+        end
+    end
+    return samples[#samples] and samples[#samples][key] or 0
+end
+
+---- Every landing offset the roll can produce, weighted like the dice: 99 roll sums x
+---- dir_samples direction quantiles x 2 flips. along/across are p90 extents in world units.
+function EO_LandingDistribution(item, unit, target_pos, dir_samples)
+    local attack_pos = unit:GetPos()
+    local dir = target_pos - attack_pos
+    dir = point(dir:x(), dir:y(), 0)
+    if dir:Len() == 0 then
+        return
+    end
+    local is_grenade = IsKindOf(item, "Grenade")
+    local mishap = item:GetMishapChance(unit, target_pos, "async")
+    local stat = Max(0, Min(100, mishap[1] - (AI_deviate_skill_diff(unit) or 0)))
+    local dist_m = MulDivRound(attack_pos:Dist(target_pos), 1000, const.SlabSizeX)
+    local mr_tiles = max_range_tiles(item, unit) or 0
+    local dist_pct = mr_tiles > 0 and Min(100, MulDivRound(dist_m, 100, mr_tiles * 1000)) or 100
+    local radius_mul = mishap[5] or 100
+    local k = dir_samples or 12
+    local fwd = SetLen(dir, 4096)
+    local samples, total = {}, 0
+    for sum = 0, 98 do
+        local radius = deviation_radius(stat, sum + 1, is_grenade, dist_pct, radius_mul)
+        local combos = Min(sum, 98 - sum) + 1
+        if radius <= 0 then
+            samples[#samples + 1] = {offset = point30, w = combos * k * 2, along = 0, across = 0}
+        else
+            for j = 0, k - 1 do
+                local u = -1000 + MulDivRound(2 * j + 1, 1000, k)
+                for flip = 0, 1 do
+                    local off = deviation_offset(dir, radius, u, flip)
+                    local along = MulDivRound(off:x(), fwd:x(), 4096) + MulDivRound(off:y(), fwd:y(), 4096)
+                    local across = MulDivRound(off:y(), fwd:x(), 4096) - MulDivRound(off:x(), fwd:y(), 4096)
+                    samples[#samples + 1] = {offset = off, w = combos, along = abs(along), across = abs(across)}
+                end
+            end
+        end
+        total = total + combos * k * 2
+    end
+    local along = weighted_pctl(samples, "along", total, 90)
+    local across = weighted_pctl(samples, "across", total, 90)
+    return {samples = samples, total = total, fwd = fwd, along = along, across = across,
+            tier = mishap[6], stat = mishap[1]}
 end
 
 local function hit_permille(stat, is_grenade, dist_pct, radius_mul, hit_radius)

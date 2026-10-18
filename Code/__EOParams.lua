@@ -115,6 +115,17 @@ const.EO.DeviationBlindPenalty = 30 ---- nobody sees it
 const.EO.DeviationBlindRadiusMul = 150 ---- % of the miss radius when nobody sees it
 const.EO.DeviationDarknessPenalty = 10 ---- unlit target at night/underground; Night Ops reduces it
 
+---- aim preview (UI_DeviationPreview): p90 landing ellipse + per-unit blast chance badges
+const.EO.DeviationPreview = true
+const.EO.DeviationPreviewDirSamples = 8 ---- direction quantiles per roll (x2 flips)
+const.EO.DeviationPreviewDashes = 40 ---- ellipse segments, every other one drawn
+const.EO.DeviationPreviewLift = 15 * guim / 100
+const.EO.DeviationPreviewColor = RGB(240, 220, 140)
+const.EO.DeviationBadgeEnemyColor = RGB(255, 255, 255)
+const.EO.DeviationBadgeFriendlyColor = RGB(255, 110, 80)
+const.EO.DeviationBadgeHeight = 22 * guim / 10
+const.EO.DeviationBadgeMinPermille = 10 ---- hide badges under 1%
+
 ------ Get item accuracy modidifers
 const.EO.DeviationUnderSlungGLModifier = -10 --- higher = more accurate
 const.EO.ShapedChargeOthersAccModifier = -25

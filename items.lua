@@ -283,6 +283,10 @@ return {
 		'CodeFileName', "Code/FUNCTIONS_DeviateGrenade.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "UI_DeviationPreview",
+		'CodeFileName', "Code/UI_DeviationPreview.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "FUNCTIONS_RatonadeBounceCalcTrajectory",
 		'CodeFileName', "Code/FUNCTIONS_RatonadeBounceCalcTrajectory.lua",
 	}),
