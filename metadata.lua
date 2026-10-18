@@ -104,6 +104,7 @@ return PlaceObj('ModDef', {
 		disable_IED_craftRules = false,
 		enabled_bounce = true,
 		enabled_bounce_pred = true,
+		enabled_deviation_pred = true,
 		explosive_dmg = "100",
 		extra_proximityExplosive_radius = "0",
 		grenade_throw_diff = "Normal (0)",

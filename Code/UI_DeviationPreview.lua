@@ -108,7 +108,7 @@ local function preview_weapon(dialog)
 end
 
 function EO_UpdateDeviationPreview(dialog, blackboard, command)
-    if not const.EO.DeviationPreview or command == "delete" or command == "delete-except-grenade" or
+    if not CurrentModOptions.enabled_deviation_pred or command == "delete" or command == "delete-except-grenade" or
         dialog.attack_confirmed then
         EO_ClearDeviationPreview()
         return
