@@ -113,6 +113,7 @@ function EO_props()
 		default = "",
 		template = false,
 		modifiable = false,
+		dont_save = true,
 	}
 
 	--------------------------------- OrdnanceProperties
@@ -153,6 +154,7 @@ function EO_props()
 		default = "",
 		template = false,
 		modifiable = false,
+		dont_save = true,
 	}
 end
 
