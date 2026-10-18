@@ -390,6 +390,33 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     return final_pos
 end
 
+local function hit_permille(stat, is_grenade, dist_pct, radius_mul, hit_radius)
+    ---- roll = 1 + two InteractionRand(50): sum s in 0..98 has min(s, 98 - s) + 1 combos
+    local hits = 0
+    for s = 0, 98 do
+        if deviation_radius(stat, s + 1, is_grenade, dist_pct, radius_mul) <= hit_radius then
+            hits = hits + Min(s, 98 - s) + 1
+        end
+    end
+    return MulDivRound(hits, 1000, 2500)
+end
+
+---- permille of rolls landing within hit_radius (milli-tiles) of target_pos: actual, and as if
+---- the shooter saw the target in light (observation and darkness penalties dropped)
+function EO_DeviationHitChance(item, unit, target_pos, hit_radius)
+    local is_grenade = IsKindOf(item, "Grenade")
+    local mishap = item:GetMishapChance(unit, target_pos)
+    local ai_modifier = AI_deviate_skill_diff(unit) or 0
+    local stat = Max(0, Min(100, mishap[1] - ai_modifier))
+    local stat_seen = Max(0, (mishap[2] or mishap[1]) - (mishap[3] or 0) + (mishap[8] or 0))
+    stat_seen = Max(0, Min(100, stat_seen - ai_modifier))
+    local dist_m = MulDivRound(unit:GetPos():Dist(target_pos), 1000, const.SlabSizeX)
+    local mr_tiles = max_range_tiles(item, unit) or 0
+    local dist_pct = mr_tiles > 0 and Min(100, MulDivRound(dist_m, 100, mr_tiles * 1000)) or 100
+    return hit_permille(stat, is_grenade, dist_pct, mishap[5] or 100, hit_radius),
+           hit_permille(stat_seen, is_grenade, dist_pct, 100, hit_radius)
+end
+
 function EO_GetWoundPenalty_Deviation(unit)
     if not IsGameRuleActive("HeavyWounds") then
         return 0
@@ -489,19 +516,18 @@ function GetDeviationModifier(item, unit, target, stat, diff_dist, opt_diff)
     --if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
     --    modifiers = modifiers and modifiers + const.EO.DeviationHeavyRainPenalty or 10
     --end
-    local radius_mul, obs_tier, dark_pen = 100, nil, nil
+    local radius_mul, obs_tier, dark_pen, obs_pen = 100, nil, nil, 0
     if IsKindOfClasses(item, "GrenadeLauncher", "RocketLauncher") and IsPoint(target) then
-        local obs_pen
         obs_pen, radius_mul, obs_tier, dark_pen = EO_GetObservationModifier(unit, target)
         modifiers = modifiers + obs_pen
     end
     ---- [1] e o que a UI mostra e o que o motor usa. Os demais existem so para o
     ---- print de debug conseguir mostrar de onde o numero veio.
     if EO_DeviationDebugRoll then
-        return {EO_DeviationDebugRoll, stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen}
+        return {EO_DeviationDebugRoll, stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen, obs_pen}
     end
 
-    return {Max(0, stat - modifiers), stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen}
+    return {Max(0, stat - modifiers), stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen, obs_pen}
 end
 
 ------------Grenade
