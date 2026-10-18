@@ -109,6 +109,12 @@ const.EO.DeviationInnacuratePenalty = 15 ---- Higher = less accurate
 const.EO.DeviationBlindDazedPenalty = 20 ---- Higher = less accurate
 --const.EO.DeviationHeavyRainPenalty = 10 ---- Higher = less accurate
 
+---- launchers only: who observes the target point
+const.EO.DeviationSpotterPenalty = 15 ---- only a squad mate sees it
+const.EO.DeviationBlindPenalty = 30 ---- nobody sees it
+const.EO.DeviationBlindRadiusMul = 150 ---- % of the miss radius when nobody sees it
+const.EO.DeviationDarknessPenalty = 10 ---- unlit target at night/underground; Night Ops reduces it
+
 ------ Get item accuracy modidifers
 const.EO.DeviationUnderSlungGLModifier = -10 --- higher = more accurate
 const.EO.ShapedChargeOthersAccModifier = -25

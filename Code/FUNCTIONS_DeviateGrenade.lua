@@ -115,7 +115,7 @@ end
 
 ---- raio do erro em milesimos de tile, a partir do roll e do stat da UI.
 ---- dist_pct = distancia do arremesso como % do alcance maximo (0..100)
-local function deviation_radius(stat, roll, is_grenade, dist_pct)
+local function deviation_radius(stat, roll, is_grenade, dist_pct, radius_mul)
     local gate = MulDivRound(stat, const.EO.DeviationStatFactorForPerfectThrow, 100)
     if roll <= gate then
         return 0, gate
@@ -143,6 +143,9 @@ local function deviation_radius(stat, roll, is_grenade, dist_pct)
 
     if not is_grenade and const.EO.DeviationLauncherRadiusMul ~= 100 then
         r = MulDivRound(r, const.EO.DeviationLauncherRadiusMul, 100)
+    end
+    if radius_mul and radius_mul ~= 100 then
+        r = MulDivRound(r, radius_mul, 100)
     end
     return r, gate
 end
@@ -198,7 +201,7 @@ if EO_DeviationClear == nil then
     EO_DeviationClear = true
 end
 
-function EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct)
+function EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct, radius_mul)
     if not EO_DeviationDebug or not EO_DeviationRings or not target_pos then
         return
     end
@@ -215,7 +218,7 @@ function EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct)
 
     ---- percentis do arremessador: onde a granada dele cai em 10/25/50/75/90% dos casos
     for _, row in ipairs(EO_DeviationPercentis and pctl_rolls or empty_table) do
-        local r = deviation_radius(stat, row[2], is_grenade, dist_pct)
+        local r = deviation_radius(stat, row[2], is_grenade, dist_pct, radius_mul)
         if r > 0 then
             local c = (row[1] == 50) and const.clrCyan or const.clrBlue
             DbgAddCircle_devi(target_pos, MulDivRound(r, const.SlabSizeX, 1000), c)
@@ -233,7 +236,7 @@ function EO_PrintDeviation(info)
     for _, row in ipairs(pctl_rolls) do
         pct[#pct + 1] = string.format("p%d %s", row[1], fmt_tiles(
                                           deviation_radius(info.stat, row[2], info.is_grenade,
-                                                           info.dist_pct)))
+                                                           info.dist_pct, info.radius_mul)))
     end
     print("---- RATONADE deviation --------------------------------------")
     print(string.format(
@@ -242,6 +245,10 @@ function EO_PrintDeviation(info)
               -info.ai_modifier, info.stat))
     print(string.format("   roll %d | gate %d | erro %s t  ->  %s", info.roll, info.gate,
                         fmt_tiles(info.err), band_of(info.err).name))
+    if info.obs_tier then
+        print(string.format("   observation tier %d | dark -%d | radius x%d%%", info.obs_tier,
+                            info.dark_pen or 0, info.radius_mul or 100))
+    end
     print("   percentis (aneis azuis, p50 ciano):  " .. table.concat(pct, "   "))
     local faixas = {}
     for _, b in ipairs(const.EO.DeviationLabelBands) do
@@ -266,6 +273,7 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     local mishap = self:GetMishapChance(unit, target_pos)
     local stat_ui = mishap[1]
     local stat_base, mods, range_pen = mishap[2] or stat_ui, mishap[3] or 0, mishap[4] or 0
+    local radius_mul, obs_tier, dark_pen = mishap[5] or 100, mishap[6], mishap[7]
     local stat = Max(0, Min(100, stat_ui - ai_modifier))
     local dist_m = (target_pos and attack_pos) and
                        MulDivRound(attack_pos:Dist(target_pos), 1000, const.SlabSizeX) or 0
@@ -284,13 +292,13 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
     roll = CheatEnabled("AlwaysHit") and 1 or roll
     roll = CheatEnabled("AlwaysMiss") and 99 or roll
 
-    local radius, gate = deviation_radius(stat, roll, is_grenade, dist_pct)
+    local radius, gate = deviation_radius(stat, roll, is_grenade, dist_pct, radius_mul)
 
     if test then
         return radius, roll
     end
 
-    EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct)
+    EO_DrawDeviationRings(target_pos, stat, is_grenade, dist_pct, radius_mul)
 
     ---- acerto exato: quem chama trata o false como "nao desviou"
     if radius <= 0 then
@@ -306,7 +314,10 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
             roll = roll,
             gate = gate,
             err = 0,
-            is_grenade = is_grenade
+            is_grenade = is_grenade,
+            radius_mul = radius_mul,
+            obs_tier = obs_tier,
+            dark_pen = dark_pen
         })
         CreateFloatingText(target_pos, T(541427622205, "Perfect Throw"))
         return false
@@ -366,7 +377,10 @@ function MishapProperties:rat_custom_deviation(unit, target_pos, attack_pos, tes
         roll = roll,
         gate = gate,
         err = err,
-        is_grenade = is_grenade
+        is_grenade = is_grenade,
+        radius_mul = radius_mul,
+        obs_tier = obs_tier,
+        dark_pen = dark_pen
     })
 
     ---- onde caiu de verdade: ponto branco na ponta do vetor vermelho
@@ -394,6 +408,76 @@ if EO_DeviationDebugRoll == nil then
     EO_DeviationDebugRoll = false
 end
 
+---- IsIlluminated for a bare position (the engine one needs a valid object)
+local function pos_illuminated(pos)
+    local flags = GetVoxelStealthParams(pos) or 0
+    if band(flags, const.vsFlagIlluminated) ~= 0 then
+        return true
+    end
+    if next(g_DistToFire) == nil then
+        return false
+    end
+    local x, y, z = WorldToVoxel(pos)
+    return AreVoxelsInFireRange({point_pack(x, y, z)})
+end
+
+---- 0 = shooter sees the target, 1 = only a squad mate does, 2 = nobody
+function EO_GetObservationTier(unit, target_pos)
+    local obj = MapGetFirst(target_pos, const.SlabSizeX / 2, "Unit", function(o)
+        return o ~= unit and not o:IsDead()
+    end)
+    if obj then
+        if HasVisibilityTo(unit, obj) then
+            return 0, obj
+        end
+        return HasVisibilityTo(unit.team, obj) and 1 or 2, obj
+    end
+    ---- a ground point fails LOS behind low cover; check at crouch height
+    local pos = (target_pos:IsValidZ() and target_pos or target_pos:SetTerrainZ()) + point(0, 0, guim)
+    if unit:CanSee(pos) then
+        return 0
+    end
+    for _, ally in ipairs(unit.team and unit.team.units or empty_table) do
+        if ally ~= unit and not ally:IsDead() and ally:IsValidPos() and ally:CanSee(pos) then
+            return 1
+        end
+    end
+    return 2
+end
+
+function EO_GetDarknessPenalty(unit, target_pos, obj)
+    if not GameState.Night and not GameState.Underground then
+        return 0
+    end
+    local lit
+    if obj then
+        lit = IsIlluminated(obj)
+    else
+        lit = pos_illuminated(target_pos)
+    end
+    if lit then
+        return 0
+    end
+    local penalty = const.EO.DeviationDarknessPenalty
+    if unit:HasNightVision() then
+        local reduction = CharacterEffectDefs.NightOps:ResolveValue("night_acc_penalty_reduction") or 0
+        penalty = MulDivRound(penalty, Max(0, 100 - reduction), 100)
+    end
+    return penalty
+end
+
+---- stat penalty, radius %, tier, darkness part
+function EO_GetObservationModifier(unit, target_pos)
+    local tier, obj = EO_GetObservationTier(unit, target_pos)
+    local dark = EO_GetDarknessPenalty(unit, target_pos, obj)
+    if tier == 2 then
+        return const.EO.DeviationBlindPenalty + dark, const.EO.DeviationBlindRadiusMul, tier, dark
+    elseif tier == 1 then
+        return const.EO.DeviationSpotterPenalty + dark, 100, tier, dark
+    end
+    return dark, 100, tier, dark
+end
+
 function GetDeviationModifier(item, unit, target, stat, diff_dist, opt_diff)
     local item_acc = item:get_throw_accuracy(unit)
     local wound_penalty = EO_GetWoundPenalty_Deviation(unit)
@@ -405,13 +489,19 @@ function GetDeviationModifier(item, unit, target, stat, diff_dist, opt_diff)
     --if GameState.RainHeavy and IsKindOf(item, "GrenadeProperties") then
     --    modifiers = modifiers and modifiers + const.EO.DeviationHeavyRainPenalty or 10
     --end
+    local radius_mul, obs_tier, dark_pen = 100, nil, nil
+    if IsKindOfClasses(item, "GrenadeLauncher", "RocketLauncher") and IsPoint(target) then
+        local obs_pen
+        obs_pen, radius_mul, obs_tier, dark_pen = EO_GetObservationModifier(unit, target)
+        modifiers = modifiers + obs_pen
+    end
     ---- [1] e o que a UI mostra e o que o motor usa. Os demais existem so para o
     ---- print de debug conseguir mostrar de onde o numero veio.
     if EO_DeviationDebugRoll then
-        return {EO_DeviationDebugRoll, stat, modifiers, diff_dist}
+        return {EO_DeviationDebugRoll, stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen}
     end
 
-    return {Max(0, stat - modifiers), stat, modifiers, diff_dist}
+    return {Max(0, stat - modifiers), stat, modifiers, diff_dist, radius_mul, obs_tier, dark_pen}
 end
 
 ------------Grenade
