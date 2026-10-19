@@ -100,8 +100,8 @@ const.EO.DeviationLabelBands = {
 
 ----------Class x Dist
 const.EO.DeviationGrenadeDistPen = 10 -- 20 -- 25 ---- Higher = less accurate
-const.EO.DeviationRPGDistPen = 6 -- 12 ---- Higher = less accurate
-const.EO.DeviationGLDistPen = 6 -- 12 ---- Higher = less accurate
+const.EO.DeviationRPGDistPen = 22 -- 12 ---- Higher = less accurate
+const.EO.DeviationGLDistPen = 22 -- 12 ---- Higher = less accurate
 
 ---- status effects/ other penalties
 const.EO.DeviationWoundStackPenalty = 5 ---- Higher = less accurate
