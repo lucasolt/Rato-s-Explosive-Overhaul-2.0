@@ -140,16 +140,23 @@ function EO_UpdateDeviationPreview(dialog, blackboard, command)
 end
 
 local Targeting_AOE_ParabolaAoE_orig = Targeting_AOE_ParabolaAoE
-function Targeting_AOE_ParabolaAoE(dialog, blackboard, command, pt)
+local function eo_parabola(dialog, blackboard, command, pt)
     Targeting_AOE_ParabolaAoE_orig(dialog, blackboard, command, pt)
     EO_UpdateDeviationPreview(dialog, blackboard, command)
 end
+Targeting_AOE_ParabolaAoE = eo_parabola
 
----- the lookup captures the function value when it is built
+---- the lookup captures the function value when it is built; a mod loaded after us (Descriptive CTH)
+---- may replace the global, so wrap its version again
 local function patch_lookup()
+    if Targeting_AOE_ParabolaAoE ~= eo_parabola then
+        Targeting_AOE_ParabolaAoE_orig = Targeting_AOE_ParabolaAoE
+        Targeting_AOE_ParabolaAoE = eo_parabola
+    end
     if TargetingModeLookup then
-        TargetingModeLookup["parabola aoe"] = Targeting_AOE_ParabolaAoE
+        TargetingModeLookup["parabola aoe"] = eo_parabola
     end
 end
 patch_lookup()
 OnMsg.ClassesBuilt = patch_lookup
+OnMsg.DataLoaded = patch_lookup
