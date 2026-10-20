@@ -74,23 +74,30 @@ local function show_badge(unit, permille, friendly)
     win:Open()
 end
 
----- chance (permille) that the blast centered on each landing sample reaches the unit
-local function blast_permille(dist, target_pos, unit_pos, blast)
+---- chance (permille) that the blast centered on each landing sample reaches the unit. A cone
+---- (shaped charge) points from the thrower through the landing point, as in GetAreaAttackParams.
+local function blast_permille(dist, target_pos, unit_pos, blast, cone)
     local hits = 0
     for _, smp in ipairs(dist.samples) do
-        if (target_pos + smp.offset):Dist2D(unit_pos) <= blast then
+        local pos = target_pos + smp.offset
+        if pos:Dist2D(unit_pos) <= blast and (not cone or pos:Equal2D(unit_pos) or
+            abs(AngleDiff(CalcOrientation(pos, unit_pos), CalcOrientation(cone.origin, pos))) <= cone.half) then
             hits = hits + smp.w
         end
     end
     return MulDivRound(hits, 1000, dist.total)
 end
 
-local function show_badges(attacker, dist, target_pos, blast)
+local function show_badges(attacker, dist, target_pos, blast, cone)
     local reach = blast + Max(dist.along, dist.across) * 2
+    if cone then
+        ---- vanilla pulls a cone's target half a slab back toward the thrower (ResolveGrenadeTargetPos)
+        target_pos = target_pos + SetLen(cone.origin - target_pos, const.SlabSizeX / 2)
+    end
     for _, unit in ipairs(g_Units) do
         if not unit:IsDead() and unit:IsValidPos() and unit:GetDist2D(target_pos) <= reach and
             (unit.team == attacker.team or HasVisibilityTo(attacker.team, unit)) then
-            local p = blast_permille(dist, target_pos, unit:GetPos(), blast)
+            local p = blast_permille(dist, target_pos, unit:GetPos(), blast, cone)
             if p >= const.EO.DeviationBadgeMinPermille then
                 show_badge(unit, p, not unit:IsOnEnemySide(attacker))
             end
@@ -131,11 +138,16 @@ function EO_UpdateDeviationPreview(dialog, blackboard, command)
     end
     local params = weapon:GetAreaAttackParams(action.id, attacker, aim_pt)
     local blast = (params and params.max_range or 0) * const.SlabSizeX
+    local cone = params and params.cone_angle and not aim_pt:Equal2D(attacker:GetPos()) and
+                     {origin = attacker:GetPos(), half = params.cone_angle / 2}
+    if cone then
+        blast = params.cone_length
+    end
     if dist.along > 0 or dist.across > 0 then
         draw_ellipse(aim_pt, dist.fwd, Max(dist.along, guim / 4), Max(dist.across, guim / 4))
     end
     if blast > 0 then
-        show_badges(attacker, dist, aim_pt, blast)
+        show_badges(attacker, dist, aim_pt, blast, cone)
     end
 end
 
