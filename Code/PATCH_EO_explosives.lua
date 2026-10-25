@@ -188,7 +188,7 @@ function RatoEO_Patch()
 	TearGasGrenade_IED.PocketM_amount = 1
 	ConcussiveGrenade.ID = "ConcussiveGrenade"
 	ConcussiveGrenade.AttackAP = 4000
-	ConcussiveGrenade.AreaOfEffect = 3
+	ConcussiveGrenade.AreaOfEffect = 4
 	ConcussiveGrenade.ThrowMaxRange = 20
 	ConcussiveGrenade.BaseRange = 9
 	ConcussiveGrenade.is_ied = false
@@ -208,7 +208,7 @@ function RatoEO_Patch()
 	ConcussiveGrenade.RestockWeight = 17
 	ConcussiveGrenade_IED.ID = "ConcussiveGrenade_IED"
 	ConcussiveGrenade_IED.AttackAP = 4000
-	ConcussiveGrenade_IED.AreaOfEffect = 3
+	ConcussiveGrenade_IED.AreaOfEffect = 4
 	ConcussiveGrenade_IED.ThrowMaxRange = 17
 	ConcussiveGrenade_IED.BaseRange = 6
 	ConcussiveGrenade_IED.is_ied = true

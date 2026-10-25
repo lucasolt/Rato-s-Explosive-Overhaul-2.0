@@ -474,7 +474,6 @@ return {
 		'name', "enabled_deviation_pred",
 		'DisplayName', "Enabled Deviation Preview",
 		'Help', "When aiming grenades, grenade launchers and rockets, shows a dotted ellipse where 90% of the throws land, and the chance for the blast to reach each visible unit.",
-		'DefaultValue', true,
 	}),
 	PlaceObj('ModItemOptionToggle', {
 		'name', "disable_IED_craftRules",

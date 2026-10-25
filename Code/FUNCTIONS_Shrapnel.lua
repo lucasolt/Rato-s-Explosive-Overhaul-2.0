@@ -603,6 +603,19 @@ function BaseWeapon:shrap_precalc_damage_and_effects(attacker, target, attack_po
             critical = false,
             critical_damage = const.Weapons.CriticalDamage
         }
+        -- Danger Close (Larry): vanilla applies it in ExplosionPrecalcDamageAndStatusEffects,
+        -- which shrapnel bypasses; attack_pos here is the explosion position
+        if attack_pos and HasPerk(attacker, "DangerClose") then
+            local dangerClose = CharacterEffectDefs.DangerClose
+            local rangeThreshold = dangerClose:ResolveValue("rangeThreshold") * const.SlabSizeX
+            if attacker:GetDist(attack_pos) <= rangeThreshold then
+                local mod = dangerClose:ResolveValue("damageMod")
+                data.base_damage = data.base_damage + MulDivRound(data.base_damage, mod, 100)
+                if record_breakdown then
+                    table.insert(record_breakdown, {name = dangerClose.DisplayName, value = mod})
+                end
+            end
+        end
         local mod_attack_args = attack_args or {}
         local mod_hit_data = hit or {}
         local action_id = "shrapnel_action"
